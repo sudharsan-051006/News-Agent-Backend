@@ -2,16 +2,23 @@ import os
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from dotenv import load_dotenv
 from collections import defaultdict
+from dotenv import load_dotenv
 
 load_dotenv()
 
+# --- Email configuration ---
 SMTP_HOST = os.getenv("EMAIL_HOST")
-SMTP_PORT = int(os.getenv("EMAIL_PORT", "587"))
 SMTP_USER = os.getenv("EMAIL_USER")
 SMTP_PASSWORD = os.getenv("EMAIL_PASSWORD")
 
+raw_port = os.getenv("EMAIL_PORT", "587")
+SMTP_PORT = int(raw_port) if raw_port and raw_port.isdigit() else 587
+
+if not all([SMTP_HOST, SMTP_USER, SMTP_PASSWORD]):
+    raise RuntimeError("❌ Missing EMAIL_* environment variables")
+
+# --- Category icons ---
 CATEGORY_ICONS = {
     "tech": "🖥️",
     "geopolitics": "🌍",
@@ -26,7 +33,6 @@ def format_email(headlines):
         category, headline, link
     }
     """
-
     grouped = defaultdict(list)
     for h in headlines:
         grouped[h["category"]].append(h)
@@ -50,14 +56,14 @@ def format_email(headlines):
 
 def send_email(to_email, headlines):
     msg = MIMEMultipart()
-    msg["From"] = EMAIL_ADDRESS
+    msg["From"] = SMTP_USER
     msg["To"] = to_email
     msg["Subject"] = "📰 Your News Digest"
 
     body = format_email(headlines)
     msg.attach(MIMEText(body, "plain"))
 
-    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
         server.starttls()
-        server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+        server.login(SMTP_USER, SMTP_PASSWORD)
         server.send_message(msg)
