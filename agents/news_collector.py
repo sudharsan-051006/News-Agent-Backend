@@ -49,6 +49,9 @@ def fetch_sports_news():
 def fetch_movies_news():
     return fetch_from_rss("movies")
 
+def fetch_local_news():
+    return fetch_from_rss("local")
+
 
 def fetch_from_rss(category):
     feed_urls = RSS_SOURCES.get(category)
@@ -123,5 +126,7 @@ def collect_news(categories):
 
         elif category == "movies":
             articles += fetch_movies_news()
+        elif category == "local":
+            articles += fetch_local_news()
 
     return articles
