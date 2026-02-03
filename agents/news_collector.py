@@ -6,8 +6,8 @@ feedparser.USER_AGENT = "AI-News-Agent/1.0 (+https://example.com)"
 
 
 MAX_ARTICLES_PER_CATEGORY = 5
-RECENCY_WEIGHT = 0.7
-POPULARITY_WEIGHT = 0.3
+RECENCY_WEIGHT = 0.5
+POPULARITY_WEIGHT = 0.5
 
 
 def _entry_timestamp(entry) -> float:
