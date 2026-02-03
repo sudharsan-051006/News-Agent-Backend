@@ -6,6 +6,32 @@ feedparser.USER_AGENT = "AI-News-Agent/1.0 (+https://example.com)"
 
 
 MAX_ARTICLES_PER_CATEGORY = 5
+RECENCY_WEIGHT = 0.7
+POPULARITY_WEIGHT = 0.3
+
+
+def _entry_timestamp(entry) -> float:
+    published = entry.get("published_parsed") or entry.get("updated_parsed")
+    if published:
+        return time.mktime(published)
+    return 0.0
+
+
+def _entry_popularity(entry) -> int:
+    popularity_fields = [
+        entry.get("slash_comments"),
+        entry.get("comment_count"),
+        entry.get("comments"),
+        entry.get("views"),
+    ]
+    for value in popularity_fields:
+        if value is None:
+            continue
+        try:
+            return int(str(value).strip())
+        except (TypeError, ValueError):
+            continue
+    return 0
 
 
 def fetch_tech_news():
@@ -39,15 +65,14 @@ def fetch_from_rss(category):
                 continue
 
             for entry in feed.entries:
-                if len(articles) >= MAX_ARTICLES_PER_CATEGORY:
-                    break
-
                 articles.append({
                     "category": category,
                     "title": entry.title,
                     "summary": entry.get("summary", ""),
                     "link": entry.link,
-                    "source": feed_url
+                    "source": feed_url,
+                    "published_ts": _entry_timestamp(entry),
+                    "popularity": _entry_popularity(entry),
                 })
 
             # polite delay (VERY important)
@@ -56,11 +81,32 @@ def fetch_from_rss(category):
         except Exception as e:
             print(f"⚠️ RSS failed [{feed_url}]: {e}")
             continue
+    deduped = {}
+    for article in articles:
+        key = article.get("link") or f"{article['source']}::{article['title']}"
+        existing = deduped.get(key)
+        if not existing:
+            deduped[key] = article
+            continue
+        if (article["published_ts"], article["popularity"]) > (existing["published_ts"], existing["popularity"]):
+            deduped[key] = article
 
-        if len(articles) >= MAX_ARTICLES_PER_CATEGORY:
-            break
+    deduped_values = list(deduped.values())
+    max_ts = max((article["published_ts"] for article in deduped_values), default=0.0)
+    max_pop = max((article["popularity"] for article in deduped_values), default=0)
 
-    return articles
+    def _score(article):
+        recency_score = (article["published_ts"] / max_ts) if max_ts else 0.0
+        popularity_score = (article["popularity"] / max_pop) if max_pop else 0.0
+        return (RECENCY_WEIGHT * recency_score) + (POPULARITY_WEIGHT * popularity_score)
+
+    ranked = sorted(
+        deduped_values,
+        key=lambda article: (_score(article), article["published_ts"], article["popularity"]),
+        reverse=True,
+    )
+
+    return ranked[:MAX_ARTICLES_PER_CATEGORY]
 
 def collect_news(categories):
     articles = []
