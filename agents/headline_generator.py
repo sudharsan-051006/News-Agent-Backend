@@ -7,15 +7,34 @@ def clean_text(text: str) -> str:
     text = re.sub(r"\s+", " ", text)
     return text.strip()
 
+
+def _normalize_for_compare(text: str) -> str:
+    text = re.sub(r"[^a-z0-9]+", "", text.lower())
+    return text.strip()
+
+def _is_too_similar(candidate: str, title: str) -> bool:
+    if not candidate or not title:
+        return False
+    candidate_norm = _normalize_for_compare(candidate)
+    title_norm = _normalize_for_compare(title)
+    if not candidate_norm or not title_norm:
+        return False
+    if candidate_norm == title_norm:
+        return True
+    return candidate_norm in title_norm or title_norm in candidate_norm
+
 def generate_ai_headline(article: dict) -> str:
-    prompt = f"""
+    title = article.get("title", "")
+    summary = article.get("summary", "")
+    base_prompt = f"""
 Rewrite as a short, factual news headline.
+Do NOT copy the original title wording.
 Preserve uncertainty words like "reportedly", "may", "according to reports".
 Do NOT assume the event has already happened.
 Limit to 12 words.
 
-Title: {article.get("title", "")}
-Summary: {article.get("summary", "")}
+Title: {title}
+Summary: {summary}
 
 Headline:
 """
@@ -23,14 +42,37 @@ Headline:
     try:
         response = ollama.chat(
             model="phi",   # or "phi"
-            messages=[{"role": "user", "content": prompt}]
+            messages=[{"role": "user", "content": base_prompt}],
+            options={"temperature": 0.7}
         )
 
-        return response["message"]["content"].strip()
+        headline = response["message"]["content"].strip()
+        if _is_too_similar(headline, title):
+            retry_prompt = f"""
+Rewrite the headline using different wording from the original title.
+Avoid copying phrases from the title.
+Keep it factual and under 12 words.
+
+Title: {title}
+Summary: {summary}
+
+Headline:
+"""
+            response = ollama.chat(
+                model="phi",   # or "phi"
+                messages=[{"role": "user", "content": retry_prompt}],
+                options={"temperature": 0.8}
+            )
+            headline = response["message"]["content"].strip()
+
+        if _is_too_similar(headline, title):
+            return ""
+
+        return headline
 
     except Exception:
         # Fallback if Ollama fails
-        return article.get("title", "")
+        return title
 
 def generate_headline(article: dict) -> str:
     """
@@ -68,5 +110,3 @@ def generate_headlines(articles):
         })
 
     return headlines
-
-
