@@ -9,7 +9,7 @@ from agents.news_collector import collect_news
 from agents.headline_generator import generate_headline
 from agents.email_sender import send_email
 
-ALL_CATEGORIES = ["tech", "sports", "movies", "geopolitics"]
+ALL_CATEGORIES = ["tech", "sports", "movies", "geopolitics", "local"]
 
 articles = collect_news(ALL_CATEGORIES)
 
