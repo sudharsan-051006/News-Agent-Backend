@@ -24,6 +24,7 @@ CATEGORY_ICONS = {
     "geopolitics": "🌍",
     "sports": "🏅",
     "movies": "🎬",
+    "local" : "IN",
 }
 
 
