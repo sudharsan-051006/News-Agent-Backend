@@ -16,6 +16,10 @@ RSS_SOURCES = {
     "geopolitics": [
         "https://feeds.reuters.com/Reuters/worldNews",
         "https://feeds.bbci.co.uk/news/world/rss.xml"
+    ],
+    "local" : [
+        "https://www.thehindu.com/news/feeder/default.rss",
+        "https://ddnews.gov.in/rss-feeds"
     ]
 }
 
