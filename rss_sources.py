@@ -5,7 +5,9 @@ import time
 RSS_SOURCES = {
     "tech": [
         "https://techcrunch.com/feed/",
-        "https://www.theverge.com/rss/index.xml"
+        "https://www.theverge.com/rss/index.xml",
+        "https://news.ycombinator.com/rss",
+        "https://dev.to/feed"
     ],
     "sports": [
         "https://www.espn.com/espn/rss/news"
