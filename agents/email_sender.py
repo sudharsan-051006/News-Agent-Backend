@@ -2,24 +2,29 @@ import os
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from dotenv import load_dotenv
 from collections import defaultdict
+from dotenv import load_dotenv
 
 load_dotenv()
 
-EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS")
-EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
-SMTP_SERVER = os.getenv("SMTP_SERVER")
-SMTP_PORT = int(os.getenv("SMTP_PORT"))
-TEST_MODE = os.getenv("TEST_MODE") == "true"
-TEST_EMAIL = os.getenv("TEST_EMAIL")
+# --- Email configuration ---
+SMTP_HOST = os.getenv("EMAIL_HOST")
+SMTP_USER = os.getenv("EMAIL_USER")
+SMTP_PASSWORD = os.getenv("EMAIL_PASSWORD")
 
+raw_port = os.getenv("EMAIL_PORT", "587")
+SMTP_PORT = int(raw_port) if raw_port and raw_port.isdigit() else 587
 
+if not all([SMTP_HOST, SMTP_USER, SMTP_PASSWORD]):
+    raise RuntimeError("❌ Missing EMAIL_* environment variables")
+
+# --- Category icons ---
 CATEGORY_ICONS = {
     "tech": "🖥️",
     "geopolitics": "🌍",
     "sports": "🏅",
     "movies": "🎬",
+    "local" : "IN",
 }
 
 
@@ -78,17 +83,15 @@ def format_email_html(headlines):
 
     return html
 
+    return body
+
 
 def send_email(to_email, headlines):
-    if TEST_MODE:
-        print(f"🧪 TEST MODE: redirecting email to {TEST_EMAIL}")
-        to_email = TEST_EMAIL
-
-    msg = MIMEMultipart("alternative")
+    msg = MIMEMultipart()
     msg["From"] = SMTP_USER
-    msg["To"] = to_email
+    msg["To"] = "sudharsanreddy.saragada@gmail.com"
     msg["Subject"] = "📰 Your News Digest"
-
+    
     html_body = format_email_html(headlines)
     msg.attach(MIMEText(html_body, "html"))
 
