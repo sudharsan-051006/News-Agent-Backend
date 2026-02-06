@@ -30,6 +30,7 @@ def generate_ai_headline(article: dict) -> str:
 Rewrite the following into a 1–2 sentence neutral news summary.
 Do not add new facts.
 Keep uncertainty words.
+Min 15 words.
 Max 30 words.
 Preserve uncertainty words like "reportedly", "may", "according to reports".
 Do NOT assume the event has already happened.
