@@ -61,6 +61,8 @@ def format_email_html(headlines):
           <p style="margin:8px 0 0;font-size:14px;opacity:0.9;">
             Curated headlines just for you
           </p>
+          <hr></hr>
+          <a href="https://news-agents-five.vercel.app/">To Update Your Perferences</a>
         </div>
 
         <!-- Content -->
@@ -131,7 +133,6 @@ def format_email_html(headlines):
         ">
           Sent with <strong>AI News Agent</strong><br/>
           Stay informed. Stay ahead.
-          <a href="https://news-agents-five.vercel.app/">To Update Your Perferences</a>
         </div>
 
       </div>
