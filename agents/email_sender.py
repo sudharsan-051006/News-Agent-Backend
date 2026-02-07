@@ -131,6 +131,7 @@ def format_email_html(headlines):
         ">
           Sent with <strong>AI News Agent</strong><br/>
           Stay informed. Stay ahead.
+          <a href="https://news-agents-five.vercel.app/">To Update Your Perferences</a>
         </div>
 
       </div>
