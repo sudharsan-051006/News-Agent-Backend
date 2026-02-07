@@ -83,8 +83,6 @@ def format_email_html(headlines):
 
     return html
 
-    return body
-
 
 def send_email(to_email, headlines):
     msg = MIMEMultipart()
