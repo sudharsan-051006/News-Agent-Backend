@@ -35,47 +35,104 @@ def format_email_html(headlines):
 
     html = """
     <html>
-    <body style="font-family: Arial, sans-serif; background:#f4f6f8; padding:20px;">
-      <div style="max-width:600px;margin:auto;">
-        <h2 style="text-align:center;">📰 Your News Digest</h2>
+    <body style="
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+        background:#eef1f5;
+        padding:24px;
+        margin:0;
+    ">
+      <div style="
+          max-width:640px;
+          margin:auto;
+          background:#ffffff;
+          border-radius:14px;
+          overflow:hidden;
+          box-shadow:0 8px 30px rgba(0,0,0,0.08);
+      ">
+
+        <!-- Header -->
+        <div style="
+            background:linear-gradient(135deg,#1a73e8,#6c63ff);
+            padding:28px 20px;
+            text-align:center;
+            color:#ffffff;
+        ">
+          <h1 style="margin:0;font-size:26px;">📰 Your Daily News Digest</h1>
+          <p style="margin:8px 0 0;font-size:14px;opacity:0.9;">
+            Curated headlines just for you
+          </p>
+        </div>
+
+        <!-- Content -->
+        <div style="padding:24px;">
     """
 
     for category, items in grouped.items():
         icon = CATEGORY_ICONS.get(category, "📰")
 
         html += f"""
-        <h3 style="margin-top:30px;">{icon} {category.upper()}</h3>
+        <div style="margin-bottom:32px;">
+          <h3 style="
+              margin:0 0 16px;
+              font-size:18px;
+              color:#333;
+              border-left:4px solid #6c63ff;
+              padding-left:10px;
+          ">
+            {icon} {category.upper()}
+          </h3>
         """
 
         for item in items:
             html += f"""
             <div style="
-              background:#ffffff;
-              border-radius:8px;
-              padding:15px;
-              margin-bottom:12px;
-              box-shadow:0 2px 6px rgba(0,0,0,0.08);
+                background:#f9fafc;
+                border-radius:10px;
+                padding:16px;
+                margin-bottom:14px;
+                border:1px solid #eef0f3;
             ">
-              <p style="margin:0;font-size:15px;">
+              <p style="
+                  margin:0;
+                  font-size:15px;
+                  line-height:1.5;
+                  color:#222;
+              ">
                 {item['headline']}
               </p>
-              <a href="{item['link']}"
-                 style="
-                   display:inline-block;
-                   margin-top:8px;
-                   color:#1a73e8;
-                   text-decoration:none;
-                   font-size:14px;
-                 ">
-                 Read more →
+
+              <a href="{item['link']}" style="
+                  display:inline-block;
+                  margin-top:12px;
+                  padding:8px 14px;
+                  background:#1a73e8;
+                  color:#ffffff;
+                  text-decoration:none;
+                  font-size:13px;
+                  border-radius:20px;
+              ">
+                Read full story →
               </a>
             </div>
             """
 
+        html += "</div>"
+
     html += """
-        <p style="text-align:center;color:#777;font-size:12px;margin-top:30px;">
-          — AI News Agent
-        </p>
+        </div>
+
+        <!-- Footer -->
+        <div style="
+            background:#f5f7fa;
+            text-align:center;
+            padding:18px;
+            font-size:12px;
+            color:#777;
+        ">
+          Sent with <strong>AI News Agent</strong><br/>
+          Stay informed. Stay ahead.
+        </div>
+
       </div>
     </body>
     </html>
@@ -87,7 +144,7 @@ def format_email_html(headlines):
 def send_email(to_email, headlines):
     msg = MIMEMultipart()
     msg["From"] = SMTP_USER
-    msg["To"] = to_email
+    msg["To"] = "sudharsanreddy.saragada@gmail.com"
     msg["Subject"] = "📰 Your News Digest"
     
     html_body = format_email_html(headlines)
