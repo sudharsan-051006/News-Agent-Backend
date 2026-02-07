@@ -10,10 +10,13 @@ RSS_SOURCES = {
         "https://dev.to/feed"
     ],
     "sports": [
-        "https://www.espn.com/espn/rss/news"
+        "https://www.espn.com/espn/rss/news",
+        "https://www.espncricinfo.com/team/india-6/rss.xml"
     ],
     "movies": [
-        "https://www.hollywoodreporter.com/feed/"
+        "https://www.hollywoodreporter.com/feed/",
+        "https://timesofindia.indiatimes.com/rssfeeds/1081479906.cms"
+        
     ],
     "geopolitics": [
         "https://feeds.reuters.com/Reuters/worldNews",
