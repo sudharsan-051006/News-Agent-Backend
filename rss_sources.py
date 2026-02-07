@@ -10,7 +10,6 @@ RSS_SOURCES = {
         "https://dev.to/feed"
     ],
     "sports": [
-        "https://www.espn.com/espn/rss/news",
         "https://www.espncricinfo.com/team/india-6/rss.xml"
     ],
     "movies": [
@@ -19,12 +18,13 @@ RSS_SOURCES = {
         
     ],
     "geopolitics": [
-        "https://feeds.reuters.com/Reuters/worldNews",
+        "https://thediplomat.com/feed",
+        "https://news.un.org/feed/subscribe/en/news/all/rss.xml",
         "https://feeds.bbci.co.uk/news/world/rss.xml"
     ],
     "local" : [
         "https://www.thehindu.com/news/feeder/default.rss",
-        "https://ddnews.gov.in/rss-feeds"
+        "https://ddnews.gov.in/en/rss-feeds/"
     ]
 }
 
