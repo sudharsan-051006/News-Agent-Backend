@@ -146,7 +146,7 @@ def format_email_html(headlines):
 def send_email(to_email, headlines):
     msg = MIMEMultipart()
     msg["From"] = SMTP_USER
-    msg["To"] = to_email
+    msg["To"] = "sudharsanreddy.saragada@gmail.com"
     msg["Subject"] = "📰 Your News Digest"
     
     html_body = format_email_html(headlines)
