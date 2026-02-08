@@ -15,6 +15,9 @@ articles = collect_news(ALL_CATEGORIES)
 
 
 def build_news_cache():
+# First clear the cache after generate the new cache
+    clear_news_cache()
+    
     print("🧠 Building news cache...")
 
     articles = collect_news(ALL_CATEGORIES)
@@ -66,8 +69,6 @@ def run_pipeline():
 
         print("✅ Email sent")
 
-    # 3️⃣ Clear cache after last user
-    clear_news_cache()
     print("\n🧹 Cache cleared after sending to all users")
 
 
