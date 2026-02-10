@@ -15,11 +15,10 @@ articles = collect_news(ALL_CATEGORIES)
 
 
 def build_news_cache():
-# First clear the cache after generate the new cache
+    print("🧹 Clearing old cache...")
     clear_news_cache()
-    
-    print("🧠 Building news cache...")
 
+    print("🧠 Building news cache...")
     articles = collect_news(ALL_CATEGORIES)
 
     for article in articles:
@@ -29,19 +28,16 @@ def build_news_cache():
     print("✅ News cache built")
 
 
+
 def run_pipeline():
-    # 🔑 NEW: get users directly from auth + preferences
     users = get_users_with_preferences_and_email()
 
     if not users:
         print("⚠️ No users with preferences found")
         return
 
-    # 1️⃣ Build cache once
-    if not is_cache_present():
-        build_news_cache()
-    else:
-        print("⚡ Using existing cache")
+    # 1️⃣ ALWAYS rebuild cache once per run
+    build_news_cache()
 
     # 2️⃣ Send emails
     for user in users:
@@ -69,7 +65,7 @@ def run_pipeline():
 
         print("✅ Email sent")
 
-    print("\n🧹 Cache cleared after sending to all users")
+    print("\n📦 Cache retained until next run")
 
 
 if __name__ == "__main__":
