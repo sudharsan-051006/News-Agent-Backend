@@ -19,7 +19,7 @@ def get_auth_users_map():
 
 
 
-def insert_news_cache(article, ai_headline, ai_summary)::
+def insert_news_cache(article, ai_headline, ai_summary):
     """
     article: {
         category, title, link, source?, published_at?
@@ -51,7 +51,7 @@ def get_cached_news_for_categories(categories):
     response = (
         supabase
         .table("news_cache")
-        .select("category, ai_headline, link")
+        .select("category, ai_headline, ai_summary, link")
         .in_("category", categories)
         .execute()
     )
