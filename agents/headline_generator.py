@@ -2,9 +2,18 @@ import re
 import ollama
 
 def clean_text(text: str) -> str:
-    """Remove HTML tags and extra spaces"""
-    text = re.sub(r"<[^>]+>", "", text)
+    if not text:
+        return ""
+
+    # Remove HTML tags
+    text = re.sub(r"<.*?>", "", text)
+
+    # Remove URLs (optional)
+    text = re.sub(r"http\S+", "", text)
+
+    # Remove extra spaces
     text = re.sub(r"\s+", " ", text)
+
     return text.strip()
 
 
@@ -24,8 +33,8 @@ def _is_too_similar(candidate: str, title: str) -> bool:
     return candidate_norm in title_norm or title_norm in candidate_norm
 
 def generate_ai_summary(article: dict) -> str:
-    title = article.get("title", "")
-    summary = article.get("summary", "")
+    title = clean_text(article.get("title", ""))
+    summary = clean_text(article.get("summary", ""))
 
     prompt = f"""
 Write a concise 3-line news summary.
