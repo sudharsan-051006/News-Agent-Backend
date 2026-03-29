@@ -24,8 +24,7 @@ RSS_SOURCES = {
     ],
     "local" : [
         "https://www.thehindu.com/news/feeder/default.rss",
-        "https://feeds.feedburner.com/ndtvnews-top-stories",
-        "https://www.indiatoday.in/rss/home"
+        "https://feeds.feedburner.com/ndtvnews-top-stories"
     ]
 }
 
