@@ -23,58 +23,44 @@ def _is_too_similar(candidate: str, title: str) -> bool:
         return True
     return candidate_norm in title_norm or title_norm in candidate_norm
 
-def generate_ai_headline(article: dict) -> str:
+def generate_ai_summary(article: dict) -> str:
     title = article.get("title", "")
     summary = article.get("summary", "")
-    base_prompt = f"""
-Rewrite the following into a 1–2 sentence neutral news summary.
-Do not add new facts.
-Keep uncertainty words.
-Min 15 words.
-Max 30 words.
-Preserve uncertainty words like "reportedly", "may", "according to reports".
-Do NOT assume the event has already happened.
+
+    prompt = f"""
+Write a concise 3-line news summary.
+
+Rules:
+- Exactly 3 lines
+- Each line 12–20 words
+- Neutral tone
+- Do not add new facts
+- Keep uncertainty words like "may", "reportedly"
 
 Title: {title}
 Summary: {summary}
 
-Headline:
+Summary:
 """
 
     try:
         response = ollama.chat(
-            model="phi",   # or "phi"
-            messages=[{"role": "user", "content": base_prompt}],
-            options={"temperature": 0.7}
+            model="phi",
+            messages=[{"role": "user", "content": prompt}],
+            options={"temperature": 0.6}
         )
 
-        headline = response["message"]["content"].strip()
-        if _is_too_similar(headline, title):
-            retry_prompt = f"""
-Rewrite the headline using different wording from the original title.
-Avoid copying phrases from the title.
-Keep it factual and under 12 words.
+        result = response["message"]["content"].strip()
 
-Title: {title}
-Summary: {summary}
+        lines = result.split("\n")
+        if len(lines) >= 3:
+            return "\n".join(lines[:3])
 
-Headline:
-"""
-            response = ollama.chat(
-                model="phi",   # or "phi"
-                messages=[{"role": "user", "content": retry_prompt}],
-                options={"temperature": 0.8}
-            )
-            headline = response["message"]["content"].strip()
-
-        if _is_too_similar(headline, title):
-            return ""
-
-        return headline
+        return result
 
     except Exception:
-        # Fallback if Ollama fails
-        return title
+        return summary[:200]
+
 
 def generate_headline(article: dict) -> str:
     """
@@ -105,6 +91,8 @@ def generate_headlines(articles):
 
     for article in articles:
         headline = generate_headline(article)
+        summary = generate_ai_summary(article)
+        
         headlines.append({
             "category": article["category"],
             "headline": headline,
