@@ -31,6 +31,7 @@ def insert_news_cache(article, ai_headline):
         "source": article.get("source"),
         "original_title": article.get("title"),
         "ai_headline": ai_headline,
+        "ai_summary": ai_summary,
         "link": article.get("link"),
         "published_at": article.get("published_at")
     }
