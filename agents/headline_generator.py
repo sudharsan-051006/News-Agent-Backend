@@ -108,6 +108,7 @@ def generate_headlines(articles):
         headlines.append({
             "category": article["category"],
             "headline": headline,
+            "summary": n["ai_summary"],
             "link": article["link"]
         })
 
