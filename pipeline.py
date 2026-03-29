@@ -6,7 +6,7 @@ from storage import (
     is_cache_present,
 )
 from agents.news_collector import collect_news
-from agents.headline_generator import generate_headline
+from agents.headline_generator import generate_headline, generate_ai_summary
 from agents.email_sender import send_email
 
 ALL_CATEGORIES = ["tech", "sports", "movies", "geopolitics", "local"]
@@ -23,7 +23,9 @@ def build_news_cache():
 
     for article in articles:
         ai_headline = generate_headline(article)
-        insert_news_cache(article, ai_headline)
+        ai_summary = generate_ai_summary(article)   # NEW
+    
+        insert_news_cache(article, ai_headline, ai_summary)  # UPDATED
 
     print("✅ News cache built")
 
