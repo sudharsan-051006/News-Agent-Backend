@@ -55,6 +55,7 @@ def run_pipeline():
             {
                 "category": n["category"],
                 "headline": n["ai_headline"],
+                "summary": n.get("ai_summary", ""),
                 "link": n["link"],
             }
             for n in raw_news
