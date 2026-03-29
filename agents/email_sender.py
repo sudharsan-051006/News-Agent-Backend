@@ -103,6 +103,15 @@ def format_email_html(headlines):
                 {item['headline']}
               </p>
 
+              <p style="
+                    margin:8px 0 0;
+                    font-size:13px;
+                    color:#555;
+                    line-height:1.4;
+                ">
+                    {item.get('summary', '')}
+                </p>
+
               <a href="{item['link']}" style="
                   display:inline-block;
                   margin-top:12px;
