@@ -19,7 +19,7 @@ def get_auth_users_map():
 
 
 
-def insert_news_cache(article, ai_headline):
+def insert_news_cache(article, ai_headline, ai_summary)::
     """
     article: {
         category, title, link, source?, published_at?
