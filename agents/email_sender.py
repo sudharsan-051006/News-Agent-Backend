@@ -62,7 +62,7 @@ def format_email_html(headlines):
             Curated headlines just for you
           </p>
           <hr></hr>
-          <a href="https://news-agents-git-main-sudharsan-051006s-projects.vercel.app/login">To Update Your Perferences</a>
+          <a href="https://www.elinity.in/login">To Update Your Perferences</a>
         </div>
 
         <!-- Content -->
