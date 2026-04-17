@@ -53,14 +53,16 @@ def fetch_local_news():
     return fetch_from_rss("local")
 
 
-def fetch_from_rss(category):
-    feed_urls = RSS_SOURCES.get(category)
-    if not feed_urls:
+def fetch_from_rss_sources(sources):
+    if not sources:
         return []
 
     articles = []
 
-    for feed_url in feed_urls:
+    for source in sources:
+        feed_url = source["rss_url"]
+        category = source["category"]
+
         try:
             feed = feedparser.parse(feed_url)
 
@@ -78,25 +80,37 @@ def fetch_from_rss(category):
                     "popularity": _entry_popularity(entry),
                 })
 
-            # polite delay (VERY important)
+            # polite delay
             time.sleep(1)
 
         except Exception as e:
             print(f"⚠️ RSS failed [{feed_url}]: {e}")
             continue
+
+    # -------------------------------
+    # DEDUPLICATION (same as yours)
+    # -------------------------------
     deduped = {}
     for article in articles:
         key = article.get("link") or f"{article['source']}::{article['title']}"
         existing = deduped.get(key)
+
         if not existing:
             deduped[key] = article
             continue
-        if (article["published_ts"], article["popularity"]) > (existing["published_ts"], existing["popularity"]):
+
+        if (article["published_ts"], article["popularity"]) > (
+            existing["published_ts"], existing["popularity"]
+        ):
             deduped[key] = article
 
     deduped_values = list(deduped.values())
-    max_ts = max((article["published_ts"] for article in deduped_values), default=0.0)
-    max_pop = max((article["popularity"] for article in deduped_values), default=0)
+
+    # -------------------------------
+    # SCORING (same as yours)
+    # -------------------------------
+    max_ts = max((a["published_ts"] for a in deduped_values), default=0.0)
+    max_pop = max((a["popularity"] for a in deduped_values), default=0)
 
     def _score(article):
         recency_score = (article["published_ts"] / max_ts) if max_ts else 0.0
@@ -105,12 +119,12 @@ def fetch_from_rss(category):
 
     ranked = sorted(
         deduped_values,
-        key=lambda article: (_score(article), article["published_ts"], article["popularity"]),
+        key=lambda a: (_score(a), a["published_ts"], a["popularity"]),
         reverse=True,
     )
 
     return ranked[:MAX_ARTICLES_PER_CATEGORY]
-
+    
 def collect_news(categories):
     articles = []
 
