@@ -43,13 +43,6 @@ def _entry_popularity(entry) -> int:
 # 🌐 MAIN FUNCTION
 # -------------------------------
 def fetch_from_rss_sources(sources):
-    """
-    sources = [
-        {"rss_url": "...", "category": "tech"},
-        {"rss_url": "...", "category": "sports"}
-    ]
-    """
-
     if not sources:
         return []
 
@@ -79,7 +72,6 @@ def fetch_from_rss_sources(sources):
                     "popularity": _entry_popularity(entry),
                 })
 
-            # polite delay (avoid blocking)
             time.sleep(1)
 
         except Exception as e:
@@ -99,7 +91,6 @@ def fetch_from_rss_sources(sources):
             deduped[key] = article
             continue
 
-        # keep better one
         if (article["published_ts"], article["popularity"]) > (
             existing["published_ts"], existing["popularity"]
         ):
@@ -128,16 +119,44 @@ def fetch_from_rss_sources(sources):
     )
 
     # -------------------------------
-    # ✅ FIX: PER-CATEGORY LIMIT
+    # ✅ BALANCED SELECTION
     # -------------------------------
-    grouped = defaultdict(list)
+    category_map = defaultdict(list)
 
     for article in ranked:
-        grouped[article["category"]].append(article)
+        category_map[article["category"]].append(article)
 
     final = []
 
-    for category, items in grouped.items():
-        final.extend(items[:MAX_ARTICLES_PER_CATEGORY])
+    for category, items in category_map.items():
+        source_map = defaultdict(list)
+
+        # group by source
+        for item in items:
+            source_map[item["source"]].append(item)
+
+        # round-robin selection
+        selected = []
+        sources = list(source_map.keys())
+        i = 0
+
+        while len(selected) < MAX_ARTICLES_PER_CATEGORY:
+            if not sources:
+                break
+
+            source = sources[i % len(sources)]
+            source_items = source_map[source]
+
+            if source_items:
+                selected.append(source_items.pop(0))
+
+            # remove empty sources
+            if not source_items:
+                sources.remove(source)
+                i -= 1
+
+            i += 1
+
+        final.extend(selected)
 
     return final
