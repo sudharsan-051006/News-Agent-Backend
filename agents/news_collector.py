@@ -1,15 +1,20 @@
 import feedparser
-from rss_sources import RSS_SOURCES
 import time
+from collections import defaultdict
 
+# -------------------------------
+# ⚙️ Config
+# -------------------------------
 feedparser.USER_AGENT = "AI-News-Agent/1.0 (+https://example.com)"
-
 
 MAX_ARTICLES_PER_CATEGORY = 5
 RECENCY_WEIGHT = 0.5
 POPULARITY_WEIGHT = 0.5
 
 
+# -------------------------------
+# 🕒 Helpers
+# -------------------------------
 def _entry_timestamp(entry) -> float:
     published = entry.get("published_parsed") or entry.get("updated_parsed")
     if published:
@@ -34,31 +39,25 @@ def _entry_popularity(entry) -> int:
     return 0
 
 
-def fetch_tech_news():
-    return fetch_from_rss("tech")
-
-
-def fetch_geopolitics_news():
-    return fetch_from_rss("geopolitics")
-
-
-def fetch_sports_news():
-    return fetch_from_rss("sports")
-
-
-def fetch_movies_news():
-    return fetch_from_rss("movies")
-
-def fetch_local_news():
-    return fetch_from_rss("local")
-
-
+# -------------------------------
+# 🌐 MAIN FUNCTION
+# -------------------------------
 def fetch_from_rss_sources(sources):
+    """
+    sources = [
+        {"rss_url": "...", "category": "tech"},
+        {"rss_url": "...", "category": "sports"}
+    ]
+    """
+
     if not sources:
         return []
 
     articles = []
 
+    # -------------------------------
+    # 📡 FETCH RSS
+    # -------------------------------
     for source in sources:
         feed_url = source["rss_url"]
         category = source["category"]
@@ -80,7 +79,7 @@ def fetch_from_rss_sources(sources):
                     "popularity": _entry_popularity(entry),
                 })
 
-            # polite delay
+            # polite delay (avoid blocking)
             time.sleep(1)
 
         except Exception as e:
@@ -88,9 +87,10 @@ def fetch_from_rss_sources(sources):
             continue
 
     # -------------------------------
-    # DEDUPLICATION (same as yours)
+    # 🔁 DEDUPLICATION
     # -------------------------------
     deduped = {}
+
     for article in articles:
         key = article.get("link") or f"{article['source']}::{article['title']}"
         existing = deduped.get(key)
@@ -99,6 +99,7 @@ def fetch_from_rss_sources(sources):
             deduped[key] = article
             continue
 
+        # keep better one
         if (article["published_ts"], article["popularity"]) > (
             existing["published_ts"], existing["popularity"]
         ):
@@ -106,8 +107,11 @@ def fetch_from_rss_sources(sources):
 
     deduped_values = list(deduped.values())
 
+    if not deduped_values:
+        return []
+
     # -------------------------------
-    # SCORING (same as yours)
+    # 📊 SCORING
     # -------------------------------
     max_ts = max((a["published_ts"] for a in deduped_values), default=0.0)
     max_pop = max((a["popularity"] for a in deduped_values), default=0)
@@ -123,24 +127,17 @@ def fetch_from_rss_sources(sources):
         reverse=True,
     )
 
-    return ranked[:MAX_ARTICLES_PER_CATEGORY]
-    
-def collect_news(categories):
-    articles = []
+    # -------------------------------
+    # ✅ FIX: PER-CATEGORY LIMIT
+    # -------------------------------
+    grouped = defaultdict(list)
 
-    for category in categories:
-        if category == "tech":
-            articles += fetch_tech_news()
+    for article in ranked:
+        grouped[article["category"]].append(article)
 
-        elif category == "geopolitics":
-            articles += fetch_geopolitics_news()
+    final = []
 
-        elif category == "sports":
-            articles += fetch_sports_news()
+    for category, items in grouped.items():
+        final.extend(items[:MAX_ARTICLES_PER_CATEGORY])
 
-        elif category == "movies":
-            articles += fetch_movies_news()
-        elif category == "local":
-            articles += fetch_local_news()
-
-    return articles
+    return final
