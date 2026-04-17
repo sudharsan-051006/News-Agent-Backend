@@ -17,7 +17,13 @@ def get_auth_users_map():
         for user in users.users
     }
 
+def get_user_sources(user_id):
+    response = supabase.table("user_sources") \
+        .select("*") \
+        .eq("user_id", user_id) \
+        .execute()
 
+    return response.data
 
 def insert_news_cache(article, ai_headline, ai_summary):
     """
