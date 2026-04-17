@@ -17,13 +17,23 @@ def get_auth_users_map():
         for user in users.users
     }
 
-def get_user_sources(user_id):
+def get_all_sources():
     response = supabase.table("user_sources") \
-        .select("*") \
-        .eq("user_id", user_id) \
+        .select("rss(id, rss_url, category)") \
         .execute()
 
-    return response.data
+    data = response.data
+
+    sources = []
+    for row in data:
+        rss = row.get("rss")
+        if rss:
+            sources.append({
+                "rss_url": rss["rss_url"],
+                "category": rss["category"]
+            })
+
+    return sources
 
 def insert_news_cache(article, ai_headline, ai_summary):
     """
