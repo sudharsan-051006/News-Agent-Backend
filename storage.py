@@ -104,49 +104,64 @@ def clear_old_news_cache(hours=2):
 
 from collections import defaultdict
 
-def get_users_with_preferences_and_email():
-    # 1️⃣ Fetch preferences
-    prefs = (
-        supabase
-        .table("preferences")
-        .select("user_id, category")
-        .execute()
-        .data
-    )
-
-    if not prefs:
-        return []
-
-    # 2️⃣ Group categories per user
-    user_categories = defaultdict(list)
-    for row in prefs:
-        user_categories[row["user_id"]].append(row["category"])
-
-    # 3️⃣ Fetch auth users (ADMIN)
+def get_users_with_email():
     auth_users = supabase.auth.admin.list_users()
 
-    # 👉 IMPORTANT FIX HERE
-    # auth_users is already a LIST
-    email_map = {
-        user.id: user.email
-        for user in auth_users
-    }
-
-    # 4️⃣ Build final user list
     users = []
-    for user_id, categories in user_categories.items():
-        email = email_map.get(user_id)
-        if not email:
+
+    for user in auth_users:
+        if not user.email:
             continue
 
         users.append({
-            "user_id": user_id,
-            "email": email,
-            "categories": categories
+            "user_id": user.id,
+            "email": user.email
         })
 
     return users
 
+def get_news_from_user_sources(user_id):
+    # 1️⃣ Get user's selected rss_ids
+    user_sources = (
+        supabase
+        .table("user_sources")
+        .select("rss_id")
+        .eq("user_id", user_id)
+        .execute()
+        .data
+    )
+
+    if not user_sources:
+        return []
+
+    rss_ids = [row["rss_id"] for row in user_sources]
+
+    # 2️⃣ Get rss URLs from rss table
+    rss_rows = (
+        supabase
+        .table("rss")
+        .select("id, rss_url")
+        .in_("id", rss_ids)
+        .execute()
+        .data
+    )
+
+    if not rss_rows:
+        return []
+
+    rss_urls = [r["rss_url"] for r in rss_rows]
+
+    # 3️⃣ Get matching news from cache
+    news = (
+        supabase
+        .table("news_cache")
+        .select("category, ai_headline, ai_summary, link, source")
+        .in_("source", rss_urls)
+        .execute()
+        .data
+    )
+
+    return news
 
 def was_email_sent_recently(user_id, minutes=60):
     since_time = datetime.utcnow() - timedelta(minutes=minutes)
