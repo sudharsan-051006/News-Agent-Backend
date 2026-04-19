@@ -1,5 +1,4 @@
 from storage import (
-    get_users_with_preferences_and_email,
     insert_news_cache,
     get_cached_news_for_categories,
     clear_news_cache,
