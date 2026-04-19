@@ -90,7 +90,7 @@ def run_pipeline():
         print(f"\n📨 Processing user: {user['email']}")
 
         try:
-            raw_news = get_news_from_user_sources(user["id"])
+            raw_news = get_news_from_user_sources(user["user_id"])
 
             if not raw_news:
                 print("⚠️ No news for user categories")
