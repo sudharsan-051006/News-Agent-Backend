@@ -3,7 +3,9 @@ from storage import (
     insert_news_cache,
     get_cached_news_for_categories,
     clear_news_cache,
-    get_all_sources,   # ✅ NEW
+    get_all_sources,
+    get_users_with_email,
+    get_news_from_user_sources # ✅ NEW
 )
 
 from agents.news_collector import fetch_from_rss_sources  # ✅ UPDATED
@@ -70,7 +72,7 @@ def build_news_cache():
 
 
 def run_pipeline():
-    users = get_users_with_preferences_and_email()
+    users = get_users_with_email()
 
     if not users:
         print("⚠️ No users with preferences found")
@@ -88,7 +90,7 @@ def run_pipeline():
         print(f"\n📨 Processing user: {user['email']}")
 
         try:
-            raw_news = get_cached_news_for_categories(user["categories"])
+            raw_news = get_news_from_user_sources(user["id"])
 
             if not raw_news:
                 print("⚠️ No news for user categories")
