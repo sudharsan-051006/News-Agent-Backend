@@ -70,7 +70,6 @@ def build_news_cache():
     print("✅ News cache built")
 
 
-
 def run_pipeline():
     users = get_users_with_email()
 
@@ -78,39 +77,47 @@ def run_pipeline():
         print("⚠️ No users with preferences found")
         return
 
+    # Build the news cache
     build_news_cache()
 
-    # Send only one test email.
+    # Test recipient: only one email will be attempted
     test_email = "sudharsanreddy.saragada@gmail.com"
 
     for user in users:
+        print(f"\n📰 Checking news for user: {user['email']}")
+
         try:
             raw_news = get_news_from_user_sources(user["user_id"])
 
             if not raw_news:
+                print("⚠️ No news for this user's categories")
                 continue
 
             headlines = [
                 {
-                    "category": n["category"],
-                    "headline": n["ai_headline"],
-                    "summary": n.get("ai_summary", ""),
-                    "link": n["link"],
+                    "category": news["category"],
+                    "headline": news["ai_headline"],
+                    "summary": news.get("ai_summary", ""),
+                    "link": news["link"],
                 }
-                for n in raw_news
+                for news in raw_news
             ]
 
+            print(f"📧 Preparing {len(headlines)} articles for test email...")
+
+            # Requires agents/email_sender.py to define:
+            # def send_email(to_email, headlines):
             send_email(
                 to_email=test_email,
                 headlines=headlines,
             )
 
-            print(f"✅ Test email sent to {test_email}")
-            return  # Stop after the first successful send
+            print(f"✅ Test email sent successfully to {test_email}")
+            return
 
         except Exception as e:
-            print(f"⚠️ Test email failed: {e}")
-            return  # Avoid repeated test-send attempts
+            print(f"❌ Test email failed: {e}")
+            return
 
     print("⚠️ No eligible news found for any user's preferences")
 
