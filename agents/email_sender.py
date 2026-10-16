@@ -152,12 +152,11 @@ def format_email_html(headlines):
     return html
 
 
-def send_email(headlines):
-    test_email = "sudharsanreddy.saragada@gmail.com"  # Replace with your email
 
+def send_email(to_email, headlines):
     msg = MIMEMultipart()
     msg["From"] = SMTP_USER
-    msg["To"] = test_email
+    msg["To"] = to_email
     msg["Subject"] = "📰 Your News Digest (Test)"
 
     html_body = format_email_html(headlines)
@@ -168,4 +167,4 @@ def send_email(headlines):
         server.login(SMTP_USER, SMTP_PASSWORD)
         server.send_message(msg)
 
-    print(f"Test email sent to {test_email}")
+    print(f"✅ Test email sent to {to_email}")
