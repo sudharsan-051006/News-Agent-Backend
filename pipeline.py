@@ -70,6 +70,7 @@ def build_news_cache():
     print("✅ News cache built")
 
 
+
 def run_pipeline():
     users = get_users_with_email()
 
@@ -77,22 +78,16 @@ def run_pipeline():
         print("⚠️ No users with preferences found")
         return
 
-    # -----------------------------------
-    # 1️⃣ Build cache once
-    # -----------------------------------
     build_news_cache()
 
-    # -----------------------------------
-    # 2️⃣ Send emails
-    # -----------------------------------
-    for user in users:
-        print(f"\n📨 Processing user: {user['email']}")
+    # Send only one test email.
+    test_email = "sudharsanreddy.saragada@gmail.com"
 
+    for user in users:
         try:
             raw_news = get_news_from_user_sources(user["user_id"])
 
             if not raw_news:
-                print("⚠️ No news for user categories")
                 continue
 
             headlines = [
@@ -106,17 +101,18 @@ def run_pipeline():
             ]
 
             send_email(
-                to_email=user["email"],
-                headlines=headlines
+                to_email=test_email,
+                headlines=headlines,
             )
 
-            print("✅ Email sent")
+            print(f"✅ Test email sent to {test_email}")
+            return  # Stop after the first successful send
 
         except Exception as e:
-            print(f"⚠️ Failed for user {user['email']}: {e}")
-            continue
+            print(f"⚠️ Test email failed: {e}")
+            return  # Avoid repeated test-send attempts
 
-    print("\n📦 Cache retained until next run")
+    print("⚠️ No eligible news found for any user's preferences")
 
 
 if __name__ == "__main__":
