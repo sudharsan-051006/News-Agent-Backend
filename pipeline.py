@@ -107,10 +107,8 @@ def run_pipeline():
 
             # Requires agents/email_sender.py to define:
             # def send_email(to_email, headlines):
-            send_email(
-                to_email=test_email,
-                headlines=headlines,
-            )
+            send_email(headlines=headlines)
+
 
             print(f"✅ Test email sent successfully to {test_email}")
             return
