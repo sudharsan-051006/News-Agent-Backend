@@ -153,11 +153,11 @@ def format_email_html(headlines):
 
 
 def send_email(headlines):
-    test_email = "your_email@gmail.com"  # Replace with your email
+    test_email = "sudharsanreddy.saragada@gmail.com"  # Replace with your email
 
     msg = MIMEMultipart()
     msg["From"] = SMTP_USER
-    msg["To"] = "sudharsanreddy.saragada@gmail.com"
+    msg["To"] = test_email
     msg["Subject"] = "📰 Your News Digest (Test)"
 
     html_body = format_email_html(headlines)
