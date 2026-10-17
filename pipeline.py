@@ -82,17 +82,17 @@ def run_pipeline():
 
     # Test recipient: only one email will be attempted
     test_email = "sudharsanreddy.saragada@gmail.com"
-
+    
     for user in users:
         print(f"\n📰 Checking news for user: {user['email']}")
-
+    
         try:
             raw_news = get_news_from_user_sources(user["user_id"])
-
+    
             if not raw_news:
                 print("⚠️ No news for this user's categories")
                 continue
-
+    
             headlines = [
                 {
                     "category": news["category"],
@@ -102,21 +102,21 @@ def run_pipeline():
                 }
                 for news in raw_news
             ]
-
+    
             print(f"📧 Preparing {len(headlines)} articles for test email...")
-
-            # Requires agents/email_sender.py to define:
-            # def send_email(to_email, headlines):
-            send_email(headlines=headlines)
-
-
-            print(f"✅ Test email sent successfully to {test_email}")
+    
+            send_email(
+                to_email=test_email,
+                headlines=headlines
+            )
+    
+            print(f"✅ Test email sent to {test_email}")
             return
-
+    
         except Exception as e:
             print(f"❌ Test email failed: {e}")
             return
-
+    
     print("⚠️ No eligible news found for any user's preferences")
 
 
