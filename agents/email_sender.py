@@ -1,10 +1,11 @@
 import os
 import smtplib
 from collections import defaultdict
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from html import escape
 from urllib.parse import urlparse
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -32,9 +33,14 @@ def _safe_http_url(value):
     """Allow only absolute HTTP(S) URLs for links and image sources."""
     if not value:
         return None
+
     value = str(value).strip()
-    parsed = urlparse(value)
-    if parsed.scheme in ("http", "https") and parsed.netloc:
+    try:
+        parsed = urlparse(value)
+    except ValueError:
+        return None
+
+    if parsed.scheme.lower() in ("http", "https") and parsed.netloc:
         return value
     return None
 
@@ -58,15 +64,19 @@ def _image_html(image_url, headline):
 
 
 def format_email_html(headlines):
+    """Build a responsive-ish HTML digest grouped by category."""
+    headlines = headlines or []
     grouped = defaultdict(list)
-    for item in headlines or []:
+    for item in headlines:
         grouped[item.get("category") or "General"].append(item)
 
     total_images = sum(
-        1 for item in (headlines or []) if _safe_http_url(item.get("image_url"))
+        1 for item in headlines if _safe_http_url(item.get("image_url"))
     )
-    total_articles = len(headlines or [])
-    print(f"🖼️ Email renderer received image URLs for {total_images}/{total_articles} articles.")
+    print(
+        f"🖼️ Email renderer received image URLs for "
+        f"{total_images}/{len(headlines)} articles."
+    )
 
     html_parts = ["""
     <!doctype html>
@@ -79,7 +89,7 @@ def format_email_html(headlines):
           <h1 style="margin:0;font-size:26px;">📰 Your Daily News Digest</h1>
           <p style="margin:8px 0 0;font-size:14px;">Curated headlines just for you</p>
           <hr style="border:0;border-top:1px solid #ffffff66;margin:18px 0;">
-          <a href="https://www.elinity.in/login" style="color:#fff;">
+          <a href="https://www.elinity.in/preferences" style="color:#fff;">
             Update your preferences
           </a>
         </div>
@@ -141,7 +151,7 @@ def format_email_html(headlines):
         </div>
         <div style="background:#f5f7fa;text-align:center;padding:18px;
                     font-size:12px;color:#777;">
-          Sent with <strong>AI News Agent</strong><br>
+          Sent with <strong>Elinity</strong><br>
           Stay informed. Stay ahead.
         </div>
       </div>
@@ -153,18 +163,23 @@ def format_email_html(headlines):
 
 
 def send_email(to_email, headlines):
-    """Send the news digest as HTML email."""
+    """Send one user's personalized news digest as an HTML email."""
+    if not to_email:
+        raise ValueError("Recipient email address is required")
+
     msg = MIMEMultipart("alternative")
     msg["From"] = SMTP_USER
     msg["To"] = to_email
-    msg["Subject"] = "📰 Your News Digest (Test)"
+    msg["Subject"] = "📰 Your Daily News Digest"
 
     html_body = format_email_html(headlines)
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
+        server.ehlo()
         server.starttls()
+        server.ehlo()
         server.login(SMTP_USER, SMTP_PASSWORD)
         server.send_message(msg)
 
-    print(f"✅ Test email sent to {to_email}")
+    print(f"✅ News digest sent to {to_email}")
