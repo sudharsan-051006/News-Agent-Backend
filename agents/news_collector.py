@@ -17,6 +17,8 @@ POPULARITY_WEIGHT = 0.5
 REQUEST_TIMEOUT = 10
 READER_TIMEOUT = 25
 MAX_IMAGE_LOOKUPS = 60
+MAX_WIKIMEDIA_LOOKUPS = 30
+WIKIMEDIA_API_URL = "https://commons.wikimedia.org/w/api.php"
 
 HTTP_HEADERS = {
     "User-Agent": (
@@ -356,6 +358,79 @@ def _get_article_image(entry):
     return extract_article_image(entry.get("link", ""))
 
 
+def search_wikimedia_image(query):
+    """Find a likely Wikimedia Commons thumbnail without an API key.
+
+    Returns (image_url, license_name, attribution) or (None, None, None).
+    Search results are only illustrative candidates; callers should not treat
+    them as the exact image published by the news outlet.
+    """
+    query = unescape(str(query or "")).strip()
+    if not query:
+        return None, None, None
+
+    # Keep queries focused; very long article headlines are noisy.
+    query = " ".join(query.split())[:180]
+    params = {
+        "action": "query",
+        "generator": "search",
+        "gsrsearch": query,
+        "gsrnamespace": 6,  # File namespace only
+        "gsrlimit": 8,
+        "prop": "imageinfo",
+        "iiprop": "url|extmetadata",
+        "iiurlwidth": 640,
+        "format": "json",
+    }
+    headers = {
+        "User-Agent": "AI-News-Agent/1.2 (Wikimedia Commons image search; contact: project maintainer)"
+    }
+
+    try:
+        response = requests.get(
+            WIKIMEDIA_API_URL,
+            params=params,
+            headers=headers,
+            timeout=REQUEST_TIMEOUT,
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except (requests.RequestException, ValueError) as exc:
+        print(f"⚠️ Wikimedia image search failed ({type(exc).__name__}): {query[:80]}")
+        return None, None, None
+
+    pages = payload.get("query", {}).get("pages", {})
+    # API generator search results are ordered by relevance.
+    for page in pages.values():
+        info_list = page.get("imageinfo") or []
+        if not info_list:
+            continue
+        info = info_list[0]
+        image_url = _valid_image_url(info.get("thumburl") or info.get("url"))
+        if not image_url:
+            continue
+
+        # Avoid vector/document files as email thumbnails.
+        title = str(page.get("title", "")).lower()
+        if title.endswith((".svg", ".pdf", ".djvu", ".ogg", ".ogv")):
+            continue
+
+        metadata = info.get("extmetadata") or {}
+        license_name = (metadata.get("LicenseShortName") or {}).get("value", "")
+        attribution = (metadata.get("Artist") or {}).get("value", "")
+        attribution = BeautifulSoup(attribution, "html.parser").get_text(" ", strip=True)
+
+        print(
+            "🖼️ Wikimedia fallback found: "
+            f"{image_url} | file={page.get('title', 'unknown')} | "
+            f"license={license_name or 'check file page'}"
+        )
+        return image_url, license_name or None, attribution or None
+
+    print(f"🖼️ Wikimedia fallback found no image: {query[:80]}")
+    return None, None, None
+
+
 def _entry_timestamp(entry):
     published = entry.get("published_parsed") or entry.get("updated_parsed")
     if published:
@@ -426,6 +501,8 @@ def fetch_from_rss_sources(sources):
     image_lookups = 0
     rss_image_count = 0
     article_page_image_count = 0
+    wikimedia_image_count = 0
+    wikimedia_lookups = 0
 
     for source in normalized_sources:
         feed_url = source["rss_url"]
@@ -462,12 +539,16 @@ def fetch_from_rss_sources(sources):
             # First pass: RSS fields only. This is the cheapest and most reliable
             # way to obtain image URLs when the publisher provides them.
             image_url = _extract_image(entry)
+            image_source = "rss" if image_url else None
+            image_license = None
+            image_attribution = None
             if image_url:
                 rss_image_count += 1
             elif link and image_lookups < MAX_IMAGE_LOOKUPS:
                 image_lookups += 1
                 image_url = extract_article_image(link)
                 if image_url:
+                    image_source = "article_page"
                     article_page_image_count += 1
 
             summary_html = entry.get("summary", "") or entry.get("description", "") or ""
@@ -475,6 +556,18 @@ def fetch_from_rss_sources(sources):
                 " ", strip=True
             )
             summary = unescape(summary).strip()
+
+            # Final no-key fallback: search Wikimedia Commons by headline and
+            # a small amount of summary context. Bound requests to protect the
+            # scheduled workflow from excessive external API calls.
+            if not image_url and wikimedia_lookups < MAX_WIKIMEDIA_LOOKUPS:
+                wikimedia_lookups += 1
+                # Search by headline first; adding the full summary often makes
+                # Commons' text search too restrictive and less relevant.
+                image_url, image_license, image_attribution = search_wikimedia_image(title)
+                if image_url:
+                    image_source = "wikimedia_commons"
+                    wikimedia_image_count += 1
 
             published_ts = _entry_timestamp(entry)
             published_at = (
@@ -493,6 +586,9 @@ def fetch_from_rss_sources(sources):
                 "published_timestamp": published_ts,
                 "popularity": _entry_popularity(entry),
                 "image_url": image_url,
+                "image_source": image_source,
+                "image_license": image_license,
+                "image_attribution": image_attribution,
             }
 
             print(
@@ -512,7 +608,8 @@ def fetch_from_rss_sources(sources):
     if image_lookups >= MAX_IMAGE_LOOKUPS:
         print(
             f"ℹ️ Reached article-page image lookup limit ({MAX_IMAGE_LOOKUPS}); "
-            "remaining articles will use RSS image metadata only."
+            "remaining articles will skip article-page lookups; Wikimedia fallback "
+            "may still run within its separate limit."
         )
 
     # Rank by recency and popularity while retaining the existing per-category cap.
@@ -555,7 +652,8 @@ def fetch_from_rss_sources(sources):
     print(
         f"🖼️ Image summary: {selected_images}/{len(selected)} selected articles "
         f"have image URLs (RSS: {rss_image_count}, article-page fallback: "
-        f"{article_page_image_count})."
+        f"{article_page_image_count}, Wikimedia: {wikimedia_image_count}; "
+        f"Wikimedia searches: {wikimedia_lookups})."
     )
     print(f"✅ Collector returning {len(selected)} articles from {len(normalized_sources)} feeds.")
 
