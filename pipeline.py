@@ -13,10 +13,6 @@ from agents.headline_generator import generate_headline, generate_ai_summary
 from agents.email_sender import send_email
 
 
-# Test mode: send at most one email per pipeline run.
-TEST_EMAIL = "sudharsanreddy.saragada@gmail.com"
-
-
 def _valid_http_url(value):
     """Return a usable HTTP(S) URL, otherwise None."""
     if not isinstance(value, str):
@@ -42,7 +38,7 @@ def _has_image(item):
 
 
 def _log_image(stage, item):
-    """Log image presence and URL without exposing any secrets."""
+    """Log image presence and URL without exposing credentials."""
     title = str(
         item.get("title")
         or item.get("original_title")
@@ -82,8 +78,8 @@ def build_news_cache():
     source_map = {}
     for source in sources:
         rss_url = source.get("rss_url")
-        category = source.get("category")
-        if rss_url and category:
+        category = source.get("category") or "General"
+        if rss_url:
             source_map[(rss_url, category)] = {
                 "rss_url": rss_url,
                 "category": category,
@@ -115,9 +111,7 @@ def build_news_cache():
         try:
             ai_headline = generate_headline(article)
             ai_summary = generate_ai_summary(article)
-
-            # storage.insert_news_cache must insert article["image_url"] into
-            # the news_cache.image_url column. It should log the returned DB value.
+            # insert_news_cache should persist article['image_url'] into news_cache.image_url.
             insert_news_cache(article, ai_headline, ai_summary)
             processed += 1
         except Exception as exc:
@@ -132,7 +126,7 @@ def build_news_cache():
 
 
 def run_pipeline():
-    print("🚀 NEWS PIPELINE VERSION: image-diagnostics-2026-10-17")
+    print("🚀 NEWS PIPELINE VERSION: normal-email-delivery-2026-10-17")
 
     try:
         users = get_users_with_email()
@@ -149,18 +143,27 @@ def run_pipeline():
         print("⚠️ No articles were stored; email will not be sent.")
         return
 
+    emails_sent = 0
+    emails_failed = 0
+
     for user in users:
-        user_email = user.get("email") or "(no email)"
-        print(f"\n📰 Checking selected RSS sources for user: {user_email}")
+        user_email = (user.get("email") or "").strip()
+        user_id = user.get("user_id")
+
+        if not user_email:
+            print(f"⚠️ Skipping user {user_id or '(unknown ID)'}: no email address.")
+            continue
+
+        print(f"\n📰 Preparing personalized digest for: {user_email}")
 
         try:
-            raw_news = get_news_from_user_sources(user["user_id"])
+            raw_news = get_news_from_user_sources(user_id)
         except Exception as exc:
-            print(f"❌ Cached-news retrieval failed: {type(exc).__name__}: {exc}")
+            print(f"❌ Cached-news retrieval failed for {user_email}: {type(exc).__name__}: {exc}")
             continue
 
         if not raw_news:
-            print("⚠️ No cached news matched this user's selected RSS sources.")
+            print(f"⚠️ No cached news matched {user_email}'s selected RSS sources.")
             continue
 
         headlines = []
@@ -182,28 +185,28 @@ def run_pipeline():
 
         payload_images = sum(1 for item in headlines if _has_image(item))
         print(
-            f"📧 Preparing {len(headlines)} articles; "
-            f"{payload_images} have valid image URLs in the email payload."
+            f"📧 Preparing {len(headlines)} articles for {user_email}; "
+            f"{payload_images} have valid image URLs."
         )
 
         if payload_images == 0:
             print(
-                "⚠️ No image URLs reached the email payload. "
-                "The issue is upstream of HTML rendering: check the collector, "
-                "storage insert result, and cached-news retrieval logs."
+                "⚠️ No image URLs reached this email payload. Check the RSS collector, "
+                "storage insert, and cached-news retrieval."
             )
 
         try:
-            # The email sender must render item["image_url"] with an HTML <img> tag.
-            send_email(to_email=TEST_EMAIL, headlines=headlines)
-            print(f"✅ Test email sent to {TEST_EMAIL}")
+            send_email(to_email=user_email, headlines=headlines)
+            emails_sent += 1
         except Exception as exc:
-            print(f"❌ Test email failed: {type(exc).__name__}: {exc}")
+            emails_failed += 1
+            print(f"❌ Email failed for {user_email}: {type(exc).__name__}: {exc}")
+            # Continue processing other users if this recipient's email fails.
 
-        # Test mode intentionally sends at most one email per run.
-        return
-
-    print("⚠️ No eligible cached news found for any user's selected RSS sources.")
+    print(
+        f"\n📬 Email delivery finished. Sent: {emails_sent}; "
+        f"failed: {emails_failed}."
+    )
 
 
 if __name__ == "__main__":
