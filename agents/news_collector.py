@@ -56,7 +56,7 @@ def _valid_image_url(url, base_url=None):
 # IMAGE EXTRACTION FROM RSS
 # -------------------------------
 def _extract_image(entry):
-    """Extract an image URL from common RSS image fields."""
+    """Extract an article image URL from RSS metadata and HTML."""
 
     # 1. Standard RSS enclosures
     for enclosure in entry.get("enclosures", []):
@@ -70,19 +70,37 @@ def _extract_image(entry):
             if image_url:
                 return image_url
 
-    # 2. Media RSS content
-    for media in entry.get("media_content", []):
-        image_url = _valid_image_url(media.get("url"))
+    # 2. Media RSS content and thumbnails
+    for field in ("media_content", "media_thumbnail"):
+        for media in entry.get(field, []):
+            image_url = _valid_image_url(media.get("url"))
+            if image_url:
+                return image_url
+
+    # 3. Image links exposed by Atom/RSS parsers
+    for link in entry.get("links", []):
+        href = link.get("href", "")
+        rel = link.get("rel", "")
+        mime_type = link.get("type", "")
+
+        if href and (
+            rel == "enclosure" and mime_type.startswith("image/")
+        ):
+            image_url = _valid_image_url(href)
+            if image_url:
+                return image_url
+
+    # 4. Image objects sometimes exposed directly by feedparser
+    image = entry.get("image")
+
+    if isinstance(image, dict):
+        image_url = _valid_image_url(
+            image.get("href") or image.get("url")
+        )
         if image_url:
             return image_url
 
-    # 3. Media RSS thumbnails
-    for thumbnail in entry.get("media_thumbnail", []):
-        image_url = _valid_image_url(thumbnail.get("url"))
-        if image_url:
-            return image_url
-
-    # 4. Images embedded in content/summary HTML
+    # 5. Images embedded in RSS content or descriptions
     html_fields = [
         content.get("value", "")
         for content in entry.get("content", [])
@@ -99,20 +117,27 @@ def _extract_image(entry):
 
         soup = BeautifulSoup(html, "html.parser")
 
+        # Check common image elements and lazy-loading attributes
         for img in soup.find_all("img"):
             image_url = (
                 img.get("src")
                 or img.get("data-src")
                 or img.get("data-lazy-src")
+                or img.get("data-original")
+                or img.get("data-url")
             )
+
+            # Use the first URL from srcset if src is unavailable
+            if not image_url and img.get("srcset"):
+                image_url = img["srcset"].split(",")[0].strip().split()[0]
 
             if image_url:
                 image_url = _valid_image_url(image_url)
+
                 if image_url:
                     return image_url
 
     return None
-
 
 # -------------------------------
 # IMAGE EXTRACTION FROM ARTICLE PAGE
