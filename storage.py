@@ -1,51 +1,47 @@
+from datetime import datetime, timedelta, timezone
 
 from supabase_client import supabase
-from datetime import datetime, timedelta
 
 
 def get_auth_users_map():
-    """
-    Returns:
-        {
-            user_id (uuid): email
-        }
-    """
-    users = supabase.auth.admin.list_users()
-
+    """Return {user_id: email} for Supabase Auth users."""
+    response = supabase.auth.admin.list_users()
+    auth_users = getattr(response, "users", response)
     return {
         user.user_metadata.get("sub", user.id): user.email
-        for user in users.users
+        for user in auth_users
+        if getattr(user, "email", None)
     }
 
 
 def get_all_sources():
+    """Return RSS feeds linked to users, preserving URL/category pairs."""
     response = (
         supabase.table("user_sources")
         .select("rss(id, rss_url, category)")
         .execute()
     )
-
     sources = []
-
-    for row in response.data:
+    seen = set()
+    for row in response.data or []:
         rss = row.get("rss")
-
-        if rss:
-            sources.append({
-                "rss_url": rss["rss_url"],
-                "category": rss["category"],
-            })
-
+        if not rss:
+            continue
+        rss_url, category = rss.get("rss_url"), rss.get("category")
+        if not rss_url or not category:
+            continue
+        key = (rss_url, category)
+        if key not in seen:
+            seen.add(key)
+            sources.append({"rss_url": rss_url, "category": category})
     return sources
 
 
 def insert_news_cache(article, ai_headline, ai_summary):
-    """
-    Store a processed article, including its image URL.
-
-    Expected article fields:
-        category, title, link, source, image_url
-    """
+    """Insert processed article data, preserving the collector's image_url."""
+    image_url = article.get("image_url")
+    if image_url:
+        image_url = str(image_url).strip() or None
 
     data = {
         "category": article["category"],
@@ -54,55 +50,45 @@ def insert_news_cache(article, ai_headline, ai_summary):
         "ai_headline": ai_headline,
         "ai_summary": ai_summary,
         "link": article.get("link"),
-        "image_url": article.get("image_url"),
+        "image_url": image_url,
         "published_at": article.get("published_at"),
     }
-
-    supabase.table("news_cache").insert(data).execute()
+    print(
+        f"💾 DB INSERT IMAGE: {'FOUND' if image_url else 'NULL'} | "
+        f"{article.get('title', 'Untitled')[:90]}"
+    )
+    result = supabase.table("news_cache").insert(data).execute()
+    inserted = getattr(result, "data", None) or []
+    if inserted:
+        saved_image = inserted[0].get("image_url")
+        print(f"💾 DB INSERT RESULT IMAGE: {'FOUND' if saved_image else 'NULL'}")
+    return result
 
 
 def get_cached_news_for_categories(categories):
-    """
-    Args:
-        categories: e.g. ["tech", "sports"]
-
-    Returns:
-        Cached news including image URLs.
-    """
+    """Return cached news for categories, including image URLs."""
     if not categories:
         return []
-
     response = (
         supabase.table("news_cache")
-        .select(
-            "category, ai_headline, ai_summary, "
-            "link, image_url, source"
-        )
+        .select("category, ai_headline, ai_summary, link, image_url, source")
         .in_("category", categories)
         .execute()
     )
-
-    return response.data
+    return response.data or []
 
 
 def is_cache_present():
-    response = (
-        supabase.table("news_cache")
-        .select("id")
-        .limit(1)
-        .execute()
-    )
-
-    return len(response.data) > 0
+    response = supabase.table("news_cache").select("id").limit(1).execute()
+    return bool(response.data)
 
 
 def clear_news_cache():
-    supabase.table("news_cache").delete().is_("id", "not_null").execute()
+    supabase.table("news_cache").delete().not_.is_("id", "null").execute()
 
 
 def clear_old_news_cache(hours=2):
-    cutoff = datetime.utcnow() - timedelta(hours=hours)
-
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
     (
         supabase.table("news_cache")
         .delete()
@@ -112,96 +98,63 @@ def clear_old_news_cache(hours=2):
 
 
 def get_users_with_email():
-    auth_users = supabase.auth.admin.list_users()
-
-    users = []
-
-    for user in auth_users:
-        if not user.email:
-            continue
-
-        users.append({
-            "user_id": user.id,
-            "email": user.email,
-        })
-
-    return users
+    """Return Auth users that have email addresses."""
+    response = supabase.auth.admin.list_users()
+    auth_users = getattr(response, "users", response)
+    return [
+        {"user_id": user.id, "email": user.email}
+        for user in auth_users
+        if getattr(user, "email", None)
+    ]
 
 
 def get_news_from_user_sources(user_id):
-    """
-    Fetch cached news from the RSS sources selected by a user.
-    Includes image_url for rendering in the email digest.
-    """
-
-    # 1. Get the user's selected RSS IDs.
+    """Fetch cached news for the user's selected RSS sources, including images."""
     user_sources = (
         supabase.table("user_sources")
         .select("rss_id")
         .eq("user_id", user_id)
         .execute()
         .data
+        or []
     )
-
-    if not user_sources:
-        return []
-
     rss_ids = [
-        row["rss_id"]
-        for row in user_sources
-        if row.get("rss_id") is not None
+        row["rss_id"] for row in user_sources if row.get("rss_id") is not None
     ]
-
     if not rss_ids:
+        print(f"⚠️ User {user_id} has no selected RSS sources.")
         return []
 
-    # 2. Get the corresponding RSS URLs.
     rss_rows = (
         supabase.table("rss")
         .select("id, rss_url")
         .in_("id", rss_ids)
         .execute()
         .data
+        or []
     )
-
-    if not rss_rows:
-        return []
-
-    rss_urls = [
-        row["rss_url"]
-        for row in rss_rows
-        if row.get("rss_url")
-    ]
-
+    rss_urls = list({row["rss_url"] for row in rss_rows if row.get("rss_url")})
     if not rss_urls:
+        print(f"⚠️ No RSS URLs found for user {user_id}.")
         return []
 
-    # 3. Fetch cached news and its image URL.
     response = (
         supabase.table("news_cache")
-        .select(
-            "category, ai_headline, ai_summary, "
-            "link, source, image_url"
-        )
+        .select("category, ai_headline, ai_summary, link, source, image_url")
         .in_("source", rss_urls)
         .execute()
     )
-
     news = response.data or []
-
+    image_count = sum(1 for item in news if item.get("image_url"))
     print(
-        f"📰 Retrieved {len(news)} articles for user "
-        f"{user_id}; "
-        f"{sum(1 for item in news if item.get('image_url'))} "
-        "have image URLs."
+        f"📰 Retrieved {len(news)} articles for user {user_id}; "
+        f"{image_count} have image URLs."
     )
-
     return news
 
 
 def was_email_sent_recently(user_id, minutes=60):
-    since_time = datetime.utcnow() - timedelta(minutes=minutes)
-
+    since_time = datetime.now(timezone.utc) - timedelta(minutes=minutes)
     response = (
         supabase.table("delivery_logs")
         .select("id")
@@ -209,11 +162,8 @@ def was_email_sent_recently(user_id, minutes=60):
         .gte("sent_at", since_time.isoformat())
         .execute()
     )
-
-    return len(response.data) > 0
+    return bool(response.data)
 
 
 def log_email_sent(user_id):
-    supabase.table("delivery_logs").insert({
-        "user_id": user_id,
-    }).execute()
+    return supabase.table("delivery_logs").insert({"user_id": user_id}).execute()
