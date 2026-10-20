@@ -14,7 +14,7 @@ from agents.article_deduplicator import deduplicate_articles
 
 # TEST MODE: send one personalized digest to this address instead of real users.
 TEST_EMAIL = "sudharsanreddy.saragada@gmail.com"
-TEST_MODE = True
+TEST_MODE = False
 
 
 def _valid_http_url(value):
