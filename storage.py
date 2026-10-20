@@ -37,25 +37,49 @@ def get_all_sources():
     return sources
 
 
+def _clean_string_list(values):
+    """Return unique, non-empty string values while preserving order."""
+    cleaned = []
+    seen = set()
+    for value in values or []:
+        if value is None:
+            continue
+        value = str(value).strip()
+        if value and value not in seen:
+            seen.add(value)
+            cleaned.append(value)
+    return cleaned
+
+
 def insert_news_cache(article, ai_headline, ai_summary):
-    """Insert processed article data, preserving the collector's image_url."""
+    """Insert one deduplicated article with all category/source associations."""
     image_url = article.get("image_url")
     if image_url:
         image_url = str(image_url).strip() or None
 
+    categories = _clean_string_list(
+        article.get("categories") or [article.get("category") or "General"]
+    )
+    sources = _clean_string_list(
+        article.get("sources") or [article.get("source")]
+    )
+
     data = {
-        "category": article["category"],
-        "source": article.get("source"),
+        # Scalar fields remain for compatibility with existing clients.
+        "category": article.get("category") or (categories[0] if categories else "General"),
+        "categories": categories,
+        "source": article.get("source") or (sources[0] if sources else None),
+        "sources": sources,
         "original_title": article.get("title"),
         "ai_headline": ai_headline,
         "ai_summary": ai_summary,
-        "link": article.get("link"),
+        "link": article.get("link") or article.get("url"),
         "image_url": image_url,
         "published_at": article.get("published_at"),
     }
     print(
         f"💾 DB INSERT IMAGE: {'FOUND' if image_url else 'NULL'} | "
-        f"{article.get('title', 'Untitled')[:90]}"
+        f"{str(article.get('title') or 'Untitled')[:90]}"
     )
     result = supabase.table("news_cache").insert(data).execute()
     inserted = getattr(result, "data", None) or []
@@ -66,16 +90,34 @@ def insert_news_cache(article, ai_headline, ai_summary):
 
 
 def get_cached_news_for_categories(categories):
-    """Return cached news for categories, including image URLs."""
+    """Return cached news matching any category, including merged category arrays."""
+    categories = _clean_string_list(categories)
     if not categories:
         return []
-    response = (
+
+    # The scalar query supports existing clients; the array query includes
+    # deduplicated articles whose requested category is not the representative's.
+    scalar_response = (
         supabase.table("news_cache")
-        .select("category, ai_headline, ai_summary, link, image_url, source")
+        .select("category, categories, ai_headline, ai_summary, link, image_url, source, sources")
         .in_("category", categories)
         .execute()
     )
-    return response.data or []
+    array_response = (
+        supabase.table("news_cache")
+        .select("category, categories, ai_headline, ai_summary, link, image_url, source, sources")
+        .overlaps("categories", categories)
+        .execute()
+    )
+
+    combined = []
+    seen = set()
+    for row in (scalar_response.data or []) + (array_response.data or []):
+        key = row.get("link") or (row.get("ai_headline"), row.get("source"))
+        if key not in seen:
+            seen.add(key)
+            combined.append(row)
+    return combined
 
 
 def is_cache_present():
@@ -109,7 +151,7 @@ def get_users_with_email():
 
 
 def get_news_from_user_sources(user_id):
-    """Fetch cached news for the user's selected RSS sources, including images."""
+    """Return each cached story once if any of its source feeds is selected by the user."""
     user_sources = (
         supabase.table("user_sources")
         .select("rss_id")
@@ -118,36 +160,48 @@ def get_news_from_user_sources(user_id):
         .data
         or []
     )
-    rss_ids = [
-        row["rss_id"] for row in user_sources if row.get("rss_id") is not None
-    ]
+    rss_ids = [row["rss_id"] for row in user_sources if row.get("rss_id") is not None]
     if not rss_ids:
         print(f"⚠️ User {user_id} has no selected RSS sources.")
         return []
 
     rss_rows = (
         supabase.table("rss")
-        .select("id, rss_url")
+        .select("id, rss_url, category")
         .in_("id", rss_ids)
         .execute()
         .data
         or []
     )
-    rss_urls = list({row["rss_url"] for row in rss_rows if row.get("rss_url")})
-    if not rss_urls:
+    selected_sources = _clean_string_list(row.get("rss_url") for row in rss_rows)
+    selected_categories = _clean_string_list(row.get("category") for row in rss_rows)
+    if not selected_sources:
         print(f"⚠️ No RSS URLs found for user {user_id}.")
         return []
 
+    # PostgREST overlaps uses PostgreSQL array overlap (&&). This returns each
+    # news_cache row once even when multiple selected feeds match the sources array.
     response = (
         supabase.table("news_cache")
-        .select("category, ai_headline, ai_summary, link, source, image_url")
-        .in_("source", rss_urls)
+        .select("category, categories, ai_headline, ai_summary, link, source, sources, image_url")
+        .overlaps("sources", selected_sources)
         .execute()
     )
     news = response.data or []
+
+    # Pick a category relevant to this user's selected feeds where possible.
+    # Category is presentation metadata only; it never participates in deduplication.
+    for item in news:
+        item_categories = _clean_string_list(item.get("categories") or [item.get("category")])
+        matching_categories = [cat for cat in selected_categories if cat in item_categories]
+        if matching_categories:
+            item["category"] = matching_categories[0]
+        elif not item.get("category") and item_categories:
+            item["category"] = item_categories[0]
+
     image_count = sum(1 for item in news if item.get("image_url"))
     print(
-        f"📰 Retrieved {len(news)} articles for user {user_id}; "
+        f"📰 Retrieved {len(news)} unique articles for user {user_id}; "
         f"{image_count} have image URLs."
     )
     return news

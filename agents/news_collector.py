@@ -533,7 +533,11 @@ def fetch_from_rss_sources(sources):
         for entry in feed.entries:
             link = entry.get("link", "")
             title = unescape(str(entry.get("title") or "Untitled")).strip()
-            if link and link in seen_links:
+            # Keep the same article once per category association. The shared
+            # content deduplicator later merges these into one article while
+            # preserving all categories and source feeds.
+            link_key = (link.strip(), category.casefold()) if link else None
+            if link_key and link_key in seen_links:
                 continue
 
             # First pass: RSS fields only. This is the cheapest and most reliable
@@ -599,8 +603,8 @@ def fetch_from_rss_sources(sources):
                 print(f"   URL: {image_url}")
 
             articles.append(article)
-            if link:
-                seen_links.add(link)
+            if link_key:
+                seen_links.add(link_key)
             feed_article_count += 1
 
         print(f"📄 Collected {feed_article_count} unique articles from this feed.")
