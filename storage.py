@@ -187,6 +187,69 @@ def clear_old_news_cache(hours=2):
     )
 
 
+def get_user_private_sources(user_id):
+    """Return private RSS feeds owned by and selected by this user."""
+
+    rows = (
+        supabase.table("user_category_sources")
+        .select(
+            "rss_id,category_id,"
+            "categories!user_category_sources_category_id_fkey("
+            "name,visibility,owner_id)"
+        )
+        .eq("user_id", user_id)
+        .execute()
+        .data
+        or []
+    )
+
+    rss_ids = []
+    category_by_rss = {}
+
+    for row in rows:
+        category = row.get("categories")
+
+        if isinstance(category, list):
+            category = category[0] if category else None
+
+        if not category:
+            continue
+
+        if category.get("visibility") != "private":
+            continue
+
+        if category.get("owner_id") != user_id:
+            continue
+
+        rss_id = row.get("rss_id")
+
+        if not rss_id:
+            continue
+
+        rss_ids.append(rss_id)
+        category_by_rss[rss_id] = category.get("name") or "General"
+
+    if not rss_ids:
+        return []
+
+    rss_rows = (
+        supabase.table("rss")
+        .select("id,rss_url")
+        .in_("id", list(set(rss_ids)))
+        .execute()
+        .data
+        or []
+    )
+
+    return [
+        {
+            "rss_url": row["rss_url"],
+            "category": category_by_rss.get(row["id"], "General"),
+        }
+        for row in rss_rows
+        if row.get("rss_url")
+    ]
+
 def get_users_with_email():
     """Return Supabase Auth users with email addresses."""
     response = supabase.auth.admin.list_users()
