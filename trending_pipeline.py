@@ -120,65 +120,49 @@ def _save_sources_in_batches(rows: list[dict]) -> int:
     return saved
 
 
-def _refresh_event_metrics(event: dict) -> None:
-    now = datetime.now(timezone.utc)
-    recent_start = now - timedelta(hours=2)
-    previous_start = now - timedelta(hours=4)
+def _refresh_metrics_with_rpc(events: list[dict]) -> tuple[int, int]:
+    """Aggregate metrics in PostgreSQL and save event updates/snapshots in one RPC."""
+    if not events:
+        return 0, 0
 
-    result = (
-        supabase.table("trend_sources")
-        .select("publisher,published_at")
-        .eq("event_id", event["id"])
-        .gte("published_at", previous_start.isoformat())
-        .lt("published_at", now.isoformat())
-        .limit(1000)
-        .execute()
-    )
-    recent_rows = []
-    previous_rows = []
-    for row in result.data or []:
-        try:
-            published_value = row["published_at"]
-            published = datetime.fromisoformat(published_value.replace("Z", "+00:00"))
-            if published.tzinfo is None:
-                published = published.replace(tzinfo=timezone.utc)
-            if published >= recent_start:
-                recent_rows.append(row)
-            else:
-                previous_rows.append(row)
-        except (KeyError, ValueError, TypeError, AttributeError):
+    now = datetime.now(timezone.utc)
+    event_ids = [str(event["id"]) for event in events]
+    result = supabase.rpc(
+        "get_trend_event_metrics",
+        {"p_event_ids": event_ids},
+    ).execute()
+    metrics_by_id = {str(row["event_id"]): row for row in (result.data or [])}
+
+    payload = []
+    missing = 0
+    for event_id in event_ids:
+        row = metrics_by_id.get(event_id)
+        if row is None:
+            missing += 1
+            log(f"No metrics returned for event {event_id}; skipping")
             continue
 
-    all_sources = (
-        supabase.table("trend_sources")
-        .select("publisher")
-        .eq("event_id", event["id"])
-        .limit(1000)
-        .execute()
-        .data or []
-    )
-    publisher_count = len({row["publisher"] for row in all_sources if row.get("publisher")})
-    score, status = score_event(len(recent_rows), len(previous_rows), publisher_count)
+        recent_count = int(row.get("articles_last_2h") or 0)
+        previous_count = int(row.get("articles_prev_2h") or 0)
+        publisher_count = int(row.get("publisher_count") or 0)
+        article_count = int(row.get("article_count") or 0)
+        score, status = score_event(recent_count, previous_count, publisher_count)
+        payload.append({
+            "event_id": event_id,
+            "article_count": article_count,
+            "publisher_count": publisher_count,
+            "articles_last_2h": recent_count,
+            "articles_prev_2h": previous_count,
+            "news_score": score,
+            "trend_status": status,
+            "updated_at": now.isoformat(),
+            "last_seen": now.isoformat(),
+            "captured_at": now.isoformat(),
+        })
 
-    supabase.table("trend_events").update({
-        "article_count": len(all_sources),
-        "publisher_count": publisher_count,
-        "news_score": score,
-        "trend_status": status,
-        "updated_at": now.isoformat(),
-        "last_seen": now.isoformat(),
-    }).eq("id", event["id"]).execute()
-
-    supabase.table("trend_snapshots").insert({
-        "event_id": event["id"],
-        "captured_at": now.isoformat(),
-        "article_count": len(all_sources),
-        "publisher_count": publisher_count,
-        "articles_last_2h": len(recent_rows),
-        "articles_prev_2h": len(previous_rows),
-        "news_score": score,
-        "trend_status": status,
-    }).execute()
+    if payload:
+        supabase.rpc("save_trend_event_metrics", {"p_metrics": payload}).execute()
+    return len(payload), missing
 
 
 def run_trending_pipeline() -> None:
@@ -255,17 +239,18 @@ def run_trending_pipeline() -> None:
     stage_start = time.perf_counter()
     events = list(touched_events.values())
     metric_errors = 0
-    log(f"Refreshing metrics for {len(events)} events...")
-    for index, event in enumerate(events, start=1):
-        try:
-            _refresh_event_metrics(event)
-        except Exception as exc:
-            metric_errors += 1
-            log(f"Metrics failed for event {event.get('id')}: {type(exc).__name__}: {exc}")
-        if index % PROGRESS_EVERY == 0 or index == len(events):
-            log(f"Metrics progress: {index}/{len(events)}; errors={metric_errors}; elapsed={elapsed(stage_start)}")
+    refreshed = 0
+    log(f"Refreshing metrics for {len(events)} events with PostgreSQL RPC...")
+    try:
+        refreshed, missing = _refresh_metrics_with_rpc(events)
+        metric_errors += missing
+        log(f"Metrics RPC completed; refreshed={refreshed}/{len(events)}; missing={missing}")
+    except Exception as exc:
+        metric_errors = len(events)
+        log(f"Metrics RPC failed: {type(exc).__name__}: {exc}")
+        raise
     log(f"Metrics stage completed in {elapsed(stage_start)}")
-    log(f"Trending pipeline finished. Articles collected={len(articles)}; unique={len(unique_articles)}; sources saved={saved}; article errors={errors}; events refreshed={len(events) - metric_errors}/{len(events)}; metric errors={metric_errors}; total_elapsed={elapsed(pipeline_start)}")
+    log(f"Trending pipeline finished. Articles collected={len(articles)}; unique={len(unique_articles)}; sources saved={saved}; article errors={errors}; events refreshed={refreshed}/{len(events)}; metric errors={metric_errors}; total_elapsed={elapsed(pipeline_start)}")
 
 
 if __name__ == "__main__":
