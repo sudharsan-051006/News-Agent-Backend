@@ -15,71 +15,67 @@ def get_auth_users_map():
 
 
 def get_all_sources():
-    """Return RSS feeds linked to users, preserving URL/category pairs."""
+    """Return feeds linked to categories, preserving each category association."""
     response = (
-        supabase.table("user_sources")
-        .select("rss(id, rss_url, category)")
+        supabase.table("category_sources")
+        .select("rss_id,category_id,rss(id,rss_url,category),categories(name,visibility)")
         .execute()
     )
     sources = []
     seen = set()
-    for row in response.data or []:
-        rss = row.get("rss")
+
+    def add_source(rss, category_row=None):
+        if isinstance(rss, list):
+            rss = rss[0] if rss else None
+        if isinstance(category_row, list):
+            category_row = category_row[0] if category_row else None
         if not rss:
-            continue
-        rss_url, category = rss.get("rss_url"), rss.get("category")
-        if not rss_url or not category:
-            continue
+            return
+        rss_url = rss.get("rss_url")
+        category = (category_row or {}).get("name") or rss.get("category") or "General"
+        if not rss_url:
+            return
         key = (rss_url, category)
         if key not in seen:
             seen.add(key)
             sources.append({"rss_url": rss_url, "category": category})
+
+    for row in response.data or []:
+        add_source(row.get("rss"), row.get("categories"))
+
+    # Compatibility for older RSS records that still use rss.category_id and
+    # have not yet been backfilled into category_sources.
+    legacy = (
+        supabase.table("rss")
+        .select("id,rss_url,category,category_id,categories(name,visibility)")
+        .not_.is_("category_id", "null")
+        .execute()
+    )
+    for row in legacy.data or []:
+        add_source(row, row.get("categories"))
+
     return sources
 
 
-def _clean_string_list(values):
-    """Return unique, non-empty string values while preserving order."""
-    cleaned = []
-    seen = set()
-    for value in values or []:
-        if value is None:
-            continue
-        value = str(value).strip()
-        if value and value not in seen:
-            seen.add(value)
-            cleaned.append(value)
-    return cleaned
-
-
 def insert_news_cache(article, ai_headline, ai_summary):
-    """Insert one deduplicated article with all category/source associations."""
+    """Insert processed article data, preserving the collector's image_url."""
     image_url = article.get("image_url")
     if image_url:
         image_url = str(image_url).strip() or None
 
-    categories = _clean_string_list(
-        article.get("categories") or [article.get("category") or "General"]
-    )
-    sources = _clean_string_list(
-        article.get("sources") or [article.get("source")]
-    )
-
     data = {
-        # Scalar fields remain for compatibility with existing clients.
-        "category": article.get("category") or (categories[0] if categories else "General"),
-        "categories": categories,
-        "source": article.get("source") or (sources[0] if sources else None),
-        "sources": sources,
+        "category": article["category"],
+        "source": article.get("source"),
         "original_title": article.get("title"),
         "ai_headline": ai_headline,
         "ai_summary": ai_summary,
-        "link": article.get("link") or article.get("url"),
+        "link": article.get("link"),
         "image_url": image_url,
         "published_at": article.get("published_at"),
     }
     print(
         f"💾 DB INSERT IMAGE: {'FOUND' if image_url else 'NULL'} | "
-        f"{str(article.get('title') or 'Untitled')[:90]}"
+        f"{article.get('title', 'Untitled')[:90]}"
     )
     result = supabase.table("news_cache").insert(data).execute()
     inserted = getattr(result, "data", None) or []
@@ -90,34 +86,16 @@ def insert_news_cache(article, ai_headline, ai_summary):
 
 
 def get_cached_news_for_categories(categories):
-    """Return cached news matching any category, including merged category arrays."""
-    categories = _clean_string_list(categories)
+    """Return cached news for categories, including image URLs."""
     if not categories:
         return []
-
-    # The scalar query supports existing clients; the array query includes
-    # deduplicated articles whose requested category is not the representative's.
-    scalar_response = (
+    response = (
         supabase.table("news_cache")
-        .select("category, categories, ai_headline, ai_summary, link, image_url, source, sources")
+        .select("category, ai_headline, ai_summary, link, image_url, source")
         .in_("category", categories)
         .execute()
     )
-    array_response = (
-        supabase.table("news_cache")
-        .select("category, categories, ai_headline, ai_summary, link, image_url, source, sources")
-        .overlaps("categories", categories)
-        .execute()
-    )
-
-    combined = []
-    seen = set()
-    for row in (scalar_response.data or []) + (array_response.data or []):
-        key = row.get("link") or (row.get("ai_headline"), row.get("source"))
-        if key not in seen:
-            seen.add(key)
-            combined.append(row)
-    return combined
+    return response.data or []
 
 
 def is_cache_present():
@@ -151,57 +129,55 @@ def get_users_with_email():
 
 
 def get_news_from_user_sources(user_id):
-    """Return each cached story once if any of its source feeds is selected by the user."""
+    """Fetch cached news for the user's selected RSS sources, including images."""
     user_sources = (
-        supabase.table("user_sources")
-        .select("rss_id")
+        supabase.table("user_category_sources")
+        .select("rss_id,category_id,categories(name,visibility,owner_id)")
         .eq("user_id", user_id)
         .execute()
         .data
         or []
     )
-    rss_ids = [row["rss_id"] for row in user_sources if row.get("rss_id") is not None]
+    # Private categories are visible only to their owner. The SQL trigger removes
+    # follower selections when a category becomes private; this check is an extra guard.
+    rss_ids = []
+    for row in user_sources:
+        if row.get("rss_id") is None:
+            continue
+        category_row = row.get("categories")
+        if isinstance(category_row, list):
+            category_row = category_row[0] if category_row else None
+        if category_row and category_row.get("visibility") == "private" and category_row.get("owner_id") != user_id:
+            continue
+        rss_ids.append(row["rss_id"])
+    rss_ids = list(set(rss_ids))
     if not rss_ids:
         print(f"⚠️ User {user_id} has no selected RSS sources.")
         return []
 
     rss_rows = (
         supabase.table("rss")
-        .select("id, rss_url, category")
+        .select("id, rss_url")
         .in_("id", rss_ids)
         .execute()
         .data
         or []
     )
-    selected_sources = _clean_string_list(row.get("rss_url") for row in rss_rows)
-    selected_categories = _clean_string_list(row.get("category") for row in rss_rows)
-    if not selected_sources:
+    rss_urls = list({row["rss_url"] for row in rss_rows if row.get("rss_url")})
+    if not rss_urls:
         print(f"⚠️ No RSS URLs found for user {user_id}.")
         return []
 
-    # PostgREST overlaps uses PostgreSQL array overlap (&&). This returns each
-    # news_cache row once even when multiple selected feeds match the sources array.
     response = (
         supabase.table("news_cache")
-        .select("category, categories, ai_headline, ai_summary, link, source, sources, image_url")
-        .overlaps("sources", selected_sources)
+        .select("category, ai_headline, ai_summary, link, source, image_url")
+        .in_("source", rss_urls)
         .execute()
     )
     news = response.data or []
-
-    # Pick a category relevant to this user's selected feeds where possible.
-    # Category is presentation metadata only; it never participates in deduplication.
-    for item in news:
-        item_categories = _clean_string_list(item.get("categories") or [item.get("category")])
-        matching_categories = [cat for cat in selected_categories if cat in item_categories]
-        if matching_categories:
-            item["category"] = matching_categories[0]
-        elif not item.get("category") and item_categories:
-            item["category"] = item_categories[0]
-
     image_count = sum(1 for item in news if item.get("image_url"))
     print(
-        f"📰 Retrieved {len(news)} unique articles for user {user_id}; "
+        f"📰 Retrieved {len(news)} articles for user {user_id}; "
         f"{image_count} have image URLs."
     )
     return news

@@ -100,6 +100,7 @@ def _article_source_row(event: dict, article: dict, observed_at: str) -> dict:
         "event_id": event["id"],
         "article_url": article_url,
         "article_title": article["title"][:1000],
+        "image_url": article.get("image_url"),
         "publisher": article.get("publisher") or "Unknown",
         "category": article.get("category") or "General",
         "published_at": published_at_or_now(article.get("published_at")),
