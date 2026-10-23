@@ -29,7 +29,7 @@ from agents.email_sender import send_email
 # ==================== TEST CONFIGURATION ====================
 TEST_MODE = True
 TEST_EMAIL = "sudharsanreddy.saragada@gmail.com"
-EMAIL_ARTICLES_PER_CATEGORY = 5
+EMAIL_ARTICLES_PER_SOURCE = 10
 # ===========================================================
 
 
@@ -220,10 +220,13 @@ def _prepare_email_articles(raw_news):
 
     for news in raw_news or []:
         link = (news.get("link") or "").strip()
-        if link and link in seen_links:
+        category_key = str(news.get("category") or "General").strip().casefold()
+        source_key = str(news.get("source") or "").strip().casefold()
+        dedupe_key = (link, category_key, source_key)
+        if link and dedupe_key in seen_links:
             continue
         if link:
-            seen_links.add(link)
+            seen_links.add(dedupe_key)
 
         headlines.append({
             "category": str(news.get("category") or "General").strip(),
@@ -239,17 +242,27 @@ def _prepare_email_articles(raw_news):
 
 
 def _limit_email_articles(headlines):
-    """Limit email output to the top configured number per category."""
+    """Allow up to 10 articles from each RSS source within each category.
+
+    Do not cap the whole category: a category with five RSS feeds can contribute
+    up to 50 articles, subject to each feed actually returning that many.
+    """
     counts = defaultdict(int)
     limited = []
 
     for article in headlines:
         category = str(article.get("category") or "General").strip().casefold()
-        if counts[category] >= EMAIL_ARTICLES_PER_CATEGORY:
+        source = str(article.get("source") or "unknown-source").strip().casefold()
+        key = (category, source)
+        if counts[key] >= EMAIL_ARTICLES_PER_SOURCE:
             continue
         limited.append(article)
-        counts[category] += 1
+        counts[key] += 1
 
+    print("📊 Email source counts: " + ", ".join(
+        f"{category} / {source}: {count}"
+        for (category, source), count in sorted(counts.items())
+    ))
     return limited
 
 
