@@ -14,6 +14,7 @@ RECENCY_WEIGHT = 0.5
 POPULARITY_WEIGHT = 0.5
 REQUEST_TIMEOUT = 10
 READER_TIMEOUT = 25
+MAX_ARTICLES_PER_FEED = 10
 MAX_IMAGE_LOOKUPS = 60
 MAX_WIKIMEDIA_LOOKUPS = 30
 WIKIMEDIA_API_URL = "https://commons.wikimedia.org/w/api.php"
@@ -529,6 +530,11 @@ def fetch_from_rss_sources(sources):
 
         feed_article_count = 0
         for entry in feed.entries:
+            # Keep at most 10 unique articles from each individual RSS feed.
+            # Apply the cap per feed URL/category association, not per category.
+            if feed_article_count >= MAX_ARTICLES_PER_FEED:
+                break
+
             link = entry.get("link", "")
             title = unescape(str(entry.get("title") or "Untitled")).strip()
             # Keep the same article once per category association. The shared
@@ -605,7 +611,10 @@ def fetch_from_rss_sources(sources):
                 seen_links.add(link_key)
             feed_article_count += 1
 
-        print(f"📄 Collected {feed_article_count} unique articles from this feed.")
+        print(
+            f"📄 Collected {feed_article_count} unique articles from this feed "
+            f"(limit: {MAX_ARTICLES_PER_FEED})."
+        )
 
     if image_lookups >= MAX_IMAGE_LOOKUPS:
         print(
