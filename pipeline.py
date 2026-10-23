@@ -253,29 +253,35 @@ def _limit_email_articles(headlines):
     return limited
 
 
-def _send_test_digest(public_categories):
-    """Send exactly one test email using public cache only."""
+def _send_test_digest():
+    """Send one test digest using the test recipient's authorized news only.
+
+    This includes their selected public feeds and all feeds in private categories
+    they own. It never includes another user's private cache rows.
+    """
     print(f"🧪 TEST MODE ENABLED — destination: {TEST_EMAIL}")
 
-    if not public_categories:
-        print("⚠️ No public categories available for test digest.")
-        return
-
     try:
-        raw_news = get_cached_news_for_categories(public_categories)
+        users = get_users_with_email()
+        test_user = next(
+            (u for u in users if (u.get("email") or "").strip().lower() == TEST_EMAIL.strip().lower()),
+            None,
+        )
+        if not test_user:
+            print("❌ TEST_EMAIL does not match a Supabase Auth user; cannot safely include private news.")
+            return
+        raw_news = get_news_from_user_sources(test_user["user_id"])
     except Exception as exc:
-        print(f"❌ Could not retrieve cached test news: {type(exc).__name__}: {exc}")
+        print(f"❌ Could not retrieve authorized test news: {type(exc).__name__}: {exc}")
         return
 
     headlines = _limit_email_articles(_prepare_email_articles(raw_news))
     if not headlines:
-        print("⚠️ Test mode found no cached public articles.")
+        print("⚠️ Test mode found no cached articles for this user's selected public feeds or owned private categories.")
         return
 
-    print(
-        f"📧 Sending TEST digest with {len(headlines)} articles across public categories: "
-        f"{', '.join(public_categories)}"
-    )
+    category_names = sorted({item.get("category", "General") for item in headlines})
+    print(f"📧 Sending TEST digest with {len(headlines)} articles across categories: {', '.join(category_names)}")
     try:
         send_email(to_email=TEST_EMAIL, headlines=headlines)
         print(f"✅ Test email sent to {TEST_EMAIL}")
@@ -294,11 +300,10 @@ def run_pipeline():
     private_stored = collect_private_news()
     print(f"📦 Collection totals: public={public_stored}, private={private_stored}")
 
-    # Test mode sends only one public digest to the configured test address.
-    # It never emails every registered user and never mixes private articles
-    # from unrelated category owners into the test digest.
+    # Test mode sends one digest to the configured test account, including only
+    # its selected public news and private categories owned by that same account.
     if TEST_MODE:
-        _send_test_digest(public_categories)
+        _send_test_digest()
         return
 
     try:
