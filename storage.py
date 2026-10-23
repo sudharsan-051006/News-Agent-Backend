@@ -257,14 +257,34 @@ def save_private_news_cache(owner_id, article, ai_headline, ai_summary):
 
 
 def get_news_from_user_sources(user_id):
-    """Retrieve selected public and private articles, enforcing owner scope."""
+    """Return selected public articles plus all private feeds in this user's own categories.
+
+    Public feeds remain preference-based (user_category_sources). Private category
+    membership comes from category_sources/categories, so every RSS feed attached
+    to the user's private category can appear under that category in their email.
+    Private rows are always filtered by owner_id to prevent cross-user exposure.
+    """
     selected = get_user_selected_sources(user_id)
-    if not selected:
-        print(f"⚠️ User {user_id} has no selected RSS/category associations.")
+    sources_to_read = [s for s in selected if s.get("visibility") == "public"]
+
+    # Private categories are owner-specific. Do not require each feed to have a
+    # separate user_category_sources selection.
+    try:
+        private_sources = get_all_private_sources()
+        sources_to_read.extend(
+            s for s in private_sources
+            if str(s.get("owner_id")) == str(user_id)
+            and s.get("visibility") == "private"
+        )
+    except Exception as exc:
+        print(f"⚠️ Could not load private category feeds for {user_id}: {type(exc).__name__}: {exc}")
+
+    if not sources_to_read:
+        print(f"⚠️ User {user_id} has no authorized public selections or private category feeds.")
         return []
 
     news, seen = [], set()
-    for source in selected:
+    for source in sources_to_read:
         rss_url = source["rss_url"]
         category = source["category"]
         if source["visibility"] == "public":
@@ -290,13 +310,12 @@ def get_news_from_user_sources(user_id):
             if key in seen:
                 continue
             seen.add(key)
-            # Include IDs/visibility for diagnostics and downstream personalization.
             row["rss_id"] = source.get("rss_id")
             row["category_id"] = source.get("category_id")
             row["visibility"] = source["visibility"]
             news.append(row)
 
-    print(f"📰 Retrieved {len(news)} authorized articles for user {user_id}.")
+    print(f"📰 Retrieved {len(news)} authorized articles for user {user_id} (public selections + owned private feeds).")
     return news
 
 
