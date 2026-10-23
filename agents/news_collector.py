@@ -1,7 +1,6 @@
 import calendar
 import re
 import time
-from collections import defaultdict
 from html import unescape
 from urllib.parse import urljoin, urlparse
 
@@ -11,7 +10,6 @@ from bs4 import BeautifulSoup
 
 
 feedparser.USER_AGENT = "AI-News-Agent/1.1 (+RSS image extraction)"
-MAX_ARTICLES_PER_CATEGORY = 5
 RECENCY_WEIGHT = 0.5
 POPULARITY_WEIGHT = 0.5
 REQUEST_TIMEOUT = 10
@@ -616,13 +614,20 @@ def fetch_from_rss_sources(sources):
             "may still run within its separate limit."
         )
 
-    # Rank by recency and popularity while retaining the existing per-category cap.
+    # Rank all collected articles by recency and popularity.
+    # Do not cap articles per category: every linked RSS feed can contribute.
     now = time.time()
-    timestamps = [a["published_timestamp"] for a in articles if a["published_timestamp"] > 0]
+    timestamps = [
+        article["published_timestamp"]
+        for article in articles
+        if article["published_timestamp"] > 0
+    ]
     oldest = min(timestamps) if timestamps else now - 30 * 86400
     newest = max(timestamps) if timestamps else now
-
-    max_popularity = max((a["popularity"] for a in articles), default=0)
+    max_popularity = max(
+        (article["popularity"] for article in articles),
+        default=0,
+    )
 
     for article in articles:
         ts = article["published_timestamp"]
@@ -634,7 +639,9 @@ def fetch_from_rss_sources(sources):
             recency_score = 0.0
 
         popularity_score = (
-            article["popularity"] / max_popularity if max_popularity > 0 else 0.0
+            article["popularity"] / max_popularity
+            if max_popularity > 0
+            else 0.0
         )
         article["score"] = (
             RECENCY_WEIGHT * recency_score
@@ -643,22 +650,16 @@ def fetch_from_rss_sources(sources):
 
     articles.sort(key=lambda item: item["score"], reverse=True)
 
-    selected = []
-    category_counts = defaultdict(int)
-    for article in articles:
-        category = article["category"]
-        if category_counts[category] >= MAX_ARTICLES_PER_CATEGORY:
-            continue
-        selected.append(article)
-        category_counts[category] += 1
-
-    selected_images = sum(1 for article in selected if article.get("image_url"))
+    selected_images = sum(1 for article in articles if article.get("image_url"))
     print(
-        f"🖼️ Image summary: {selected_images}/{len(selected)} selected articles "
+        f"🖼️ Image summary: {selected_images}/{len(articles)} articles "
         f"have image URLs (RSS: {rss_image_count}, article-page fallback: "
         f"{article_page_image_count}, Wikimedia: {wikimedia_image_count}; "
         f"Wikimedia searches: {wikimedia_lookups})."
     )
-    print(f"✅ Collector returning {len(selected)} articles from {len(normalized_sources)} feeds.")
+    print(
+        f"✅ Collector returning {len(articles)} articles "
+        f"from {len(normalized_sources)} feeds."
+    )
 
-    return selected
+    return articles
