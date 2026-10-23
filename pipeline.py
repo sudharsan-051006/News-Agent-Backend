@@ -1,4 +1,13 @@
+"""Build public/private news caches and deliver personalized email digests.
 
+TEST_MODE=True sends one test digest to TEST_EMAIL using public-category news.
+Set TEST_MODE=False to send digests to registered users.
+
+Routing rules:
+- Public category RSS associations -> news_cache
+- Private category RSS associations -> private_news_cache for category owner
+- Private collection does not depend on user_category_sources selections.
+"""
 from collections import defaultdict
 from urllib.parse import urlparse
 
@@ -10,20 +19,25 @@ from storage import (
     get_all_private_sources,
     get_users_with_email,
     get_news_from_user_sources,
+    get_cached_news_for_categories,
 )
 from agents.news_collector import fetch_from_rss_sources
 from agents.headline_generator import generate_headline, generate_ai_summary
 from agents.email_sender import send_email
 
 
+# ==================== TEST CONFIGURATION ====================
+TEST_MODE = True
+TEST_EMAIL = "sudharsanreddy.saragada@gmail.com"
+EMAIL_ARTICLES_PER_CATEGORY = 5
+# ===========================================================
+
+
 def _valid_http_url(value):
-    if not isinstance(value, str):
+    if not isinstance(value, str) or not value.strip():
         return None
 
     value = value.strip()
-    if not value:
-        return None
-
     try:
         parsed = urlparse(value)
     except ValueError:
@@ -31,63 +45,47 @@ def _valid_http_url(value):
 
     if parsed.scheme.lower() not in ("http", "https") or not parsed.netloc:
         return None
-
     return value
 
 
-def _log_image(stage, item):
-    title = str(
-        item.get("title")
-        or item.get("original_title")
-        or item.get("ai_headline")
-        or item.get("headline")
-        or "Untitled"
-    )[:90]
-
-    image_url = _valid_http_url(item.get("image_url"))
-    print(f"🖼️ {stage}: {'FOUND' if image_url else 'NULL/INVALID'} | {title}")
-
-    if image_url:
-        print(f"   URL: {image_url}")
-
-
 def _unique_source_pairs(sources):
-    """Deduplicate associations, not categories or owners."""
+    """Deduplicate identical associations without losing category/owner links."""
     result = {}
-    for source in sources:
-        rss_url = source.get("rss_url")
-        category_id = source.get("category_id")
-        category = source.get("category") or "General"
-        visibility = source.get("visibility")
-        owner_id = source.get("owner_id")
 
+    for source in sources or []:
+        rss_url = _valid_http_url(source.get("rss_url"))
+        category = str(source.get("category") or "General").strip()
         if not rss_url:
             continue
 
-        # Preserve a feed linked to multiple categories and/or owners.
-        key = (rss_url, category_id, category, visibility, owner_id)
-        result[key] = {
-            **source,
-            "rss_url": rss_url,
-            "category": category,
-        }
+        key = (
+            rss_url,
+            source.get("category_id"),
+            category.casefold(),
+            source.get("visibility"),
+            source.get("owner_id"),
+        )
+        result[key] = {**source, "rss_url": rss_url, "category": category}
 
     return list(result.values())
 
 
 def _process_articles(articles, label):
-    """Generate AI headline/summary while retaining article metadata."""
+    """Generate AI headline/summary for each collected article."""
     processed = []
 
-    for article in articles:
-        _log_image(f"{label} COLLECTOR IMAGE", article)
+    for article in articles or []:
+        title = str(article.get("title") or article.get("original_title") or "Untitled")[:90]
+        image_url = _valid_http_url(article.get("image_url"))
+        print(f"🖼️ {label} IMAGE: {'FOUND' if image_url else 'NULL/INVALID'} | {title}")
+        if image_url:
+            print(f"   URL: {image_url}")
 
         try:
             headline = generate_headline(article)
             summary = generate_ai_summary(article)
             processed.append((article, headline, summary))
         except Exception as exc:
-            title = str(article.get("title") or "Untitled")[:80]
             print(
                 f"❌ {label} AI processing failed for {title}: "
                 f"{type(exc).__name__}: {exc}"
@@ -97,47 +95,45 @@ def _process_articles(articles, label):
 
 
 def build_news_cache():
-    """Collect every RSS association belonging to a public category."""
-    print("🌐 Loading public category RSS associations...")
+    """Collect every public category/feed association into the shared cache."""
+    print("🌐 Loading public RSS sources from categories/category_sources/rss...")
 
     try:
         sources = _unique_source_pairs(get_all_sources())
     except Exception as exc:
-        print(f"❌ Could not load public sources: {type(exc).__name__}: {exc}")
-        return 0
+        print(f"❌ Could not load public RSS sources: {type(exc).__name__}: {exc}")
+        return 0, []
 
-    # Defensive visibility check: never route private associations to the
-    # shared cache, even if a storage function accidentally returns one.
-    sources = [s for s in sources if s.get("visibility") == "public"]
-
+    # Fail closed: private rows must never be written to the shared cache.
+    sources = [source for source in sources if source.get("visibility") == "public"]
     if not sources:
-        print("⚠️ No public RSS associations found; preserving existing cache.")
-        return 0
+        print("⚠️ No public RSS/category associations found; preserving existing cache.")
+        return 0, []
 
-    print(f"📡 Collecting from {len(sources)} public category/feed associations...")
+    categories = sorted({source["category"] for source in sources})
+    print(f"📡 Fetching {len(sources)} public RSS/category associations...")
 
     try:
         articles = fetch_from_rss_sources(sources)
     except Exception as exc:
-        print(f"❌ Public collection failed: {type(exc).__name__}: {exc}")
-        return 0
+        print(f"❌ Public RSS collection failed: {type(exc).__name__}: {exc}")
+        return 0, categories
 
     if not articles:
-        print("⚠️ No public articles collected; preserving existing cache.")
-        return 0
+        print("⚠️ Public collector returned no articles; preserving existing cache.")
+        return 0, categories
 
     processed = _process_articles(articles, "PUBLIC")
     if not processed:
-        print("⚠️ No public articles processed; preserving existing cache.")
-        return 0
+        print("⚠️ No public articles completed AI processing; preserving existing cache.")
+        return 0, categories
 
-    # Do not clear the existing cache until new articles were collected
-    # and AI processing completed.
+    # Clear only after successful collection and processing.
     try:
         clear_news_cache()
     except Exception as exc:
-        print(f"❌ Could not clear public cache: {type(exc).__name__}: {exc}")
-        return 0
+        print(f"❌ Could not clear old public cache: {type(exc).__name__}: {exc}")
+        return 0, categories
 
     stored = 0
     for article, headline, summary in processed:
@@ -146,54 +142,43 @@ def build_news_cache():
             stored += 1
         except Exception as exc:
             title = str(article.get("title") or "Untitled")[:80]
-            print(
-                f"❌ Public cache insert failed for {title}: "
-                f"{type(exc).__name__}: {exc}"
-            )
+            print(f"❌ Public cache insert failed for {title}: {type(exc).__name__}: {exc}")
 
-    print(f"✅ Public cache stored {stored}/{len(processed)} articles.")
-    return stored
+    print(f"✅ Shared public cache built: {stored}/{len(processed)} articles stored.")
+    return stored, categories
 
 
 def collect_private_news():
-    """
-    Collect every feed linked to a private category and save its articles
-    under that category's owner. Does not consult user_category_sources.
-    """
+    """Collect every private category/feed association and save by category owner."""
     print("\n🔒 Loading all private category RSS associations...")
 
     try:
-        all_sources = _unique_source_pairs(get_all_private_sources())
+        sources = _unique_source_pairs(get_all_private_sources())
     except Exception as exc:
-        print(f"❌ Could not load private sources: {type(exc).__name__}: {exc}")
+        print(f"❌ Could not load private RSS sources: {type(exc).__name__}: {exc}")
         return 0
 
-    private_sources = [
-        source
-        for source in all_sources
+    sources = [
+        source for source in sources
         if source.get("visibility") == "private" and source.get("owner_id")
     ]
-
-    if not private_sources:
+    if not sources:
         print("ℹ️ No private category RSS associations found.")
         return 0
 
-    # Collect separately by owner. This keeps private category articles
-    # isolated and ensures each feed/category association is preserved.
     sources_by_owner = defaultdict(list)
-    for source in private_sources:
+    for source in sources:
         sources_by_owner[str(source["owner_id"])].append(source)
 
     total_stored = 0
-
-    for owner_id, sources in sources_by_owner.items():
+    for owner_id, owner_sources in sources_by_owner.items():
         print(
-            f"\n🔒 Owner {owner_id}: collecting "
-            f"{len(sources)} private category/feed associations..."
+            f"\n🔒 Owner {owner_id}: fetching "
+            f"{len(owner_sources)} private category/feed associations..."
         )
 
         try:
-            articles = fetch_from_rss_sources(sources)
+            articles = fetch_from_rss_sources(owner_sources)
         except Exception as exc:
             print(
                 f"❌ Private collection failed for owner {owner_id}: "
@@ -206,17 +191,11 @@ def collect_private_news():
             continue
 
         processed = _process_articles(articles, "PRIVATE")
-        stored_for_owner = 0
-
+        owner_stored = 0
         for article, headline, summary in processed:
             try:
-                save_private_news_cache(
-                    owner_id,
-                    article,
-                    headline,
-                    summary,
-                )
-                stored_for_owner += 1
+                save_private_news_cache(owner_id, article, headline, summary)
+                owner_stored += 1
             except Exception as exc:
                 title = str(article.get("title") or "Untitled")[:80]
                 print(
@@ -224,32 +203,104 @@ def collect_private_news():
                     f"{type(exc).__name__}: {exc}"
                 )
 
-        total_stored += stored_for_owner
+        total_stored += owner_stored
         print(
             f"🔒 Owner {owner_id}: saved/updated "
-            f"{stored_for_owner}/{len(processed)} private articles."
+            f"{owner_stored}/{len(processed)} private articles."
         )
 
     print(f"✅ Total private articles saved/updated: {total_stored}")
     return total_stored
 
 
-def run_pipeline():
-    print("🚀 NEWS PIPELINE: category-visibility-routing")
+def _prepare_email_articles(raw_news):
+    """Normalize cached rows and deduplicate repeated article links."""
+    headlines = []
+    seen_links = set()
 
-    # Public categories -> news_cache
-    public_stored = build_news_cache()
-    if public_stored == 0:
-        print("⚠️ Public cache was not refreshed; previous cache is preserved.")
+    for news in raw_news or []:
+        link = (news.get("link") or "").strip()
+        if link and link in seen_links:
+            continue
+        if link:
+            seen_links.add(link)
 
-    # Private categories -> private_news_cache, grouped by category owner
-    private_stored = collect_private_news()
+        headlines.append({
+            "category": str(news.get("category") or "General").strip(),
+            "headline": news.get("ai_headline") or news.get("original_title") or "Untitled",
+            "summary": news.get("ai_summary") or "",
+            "link": link,
+            "source": news.get("source") or "",
+            "image_url": _valid_http_url(news.get("image_url")),
+            "published_at": news.get("published_at"),
+        })
+
+    return headlines
+
+
+def _limit_email_articles(headlines):
+    """Limit email output to the top configured number per category."""
+    counts = defaultdict(int)
+    limited = []
+
+    for article in headlines:
+        category = str(article.get("category") or "General").strip().casefold()
+        if counts[category] >= EMAIL_ARTICLES_PER_CATEGORY:
+            continue
+        limited.append(article)
+        counts[category] += 1
+
+    return limited
+
+
+def _send_test_digest(public_categories):
+    """Send exactly one test email using public cache only."""
+    print(f"🧪 TEST MODE ENABLED — destination: {TEST_EMAIL}")
+
+    if not public_categories:
+        print("⚠️ No public categories available for test digest.")
+        return
+
+    try:
+        raw_news = get_cached_news_for_categories(public_categories)
+    except Exception as exc:
+        print(f"❌ Could not retrieve cached test news: {type(exc).__name__}: {exc}")
+        return
+
+    headlines = _limit_email_articles(_prepare_email_articles(raw_news))
+    if not headlines:
+        print("⚠️ Test mode found no cached public articles.")
+        return
+
     print(
-        f"📦 Collection totals: public={public_stored}, "
-        f"private={private_stored}"
+        f"📧 Sending TEST digest with {len(headlines)} articles across public categories: "
+        f"{', '.join(public_categories)}"
     )
+    try:
+        send_email(to_email=TEST_EMAIL, headlines=headlines)
+        print(f"✅ Test email sent to {TEST_EMAIL}")
+    except Exception as exc:
+        print(f"❌ Test email failed: {type(exc).__name__}: {exc}")
 
-    # Email delivery remains personalized using the existing selection logic.
+
+def run_pipeline():
+    print("🚀 NEWS PIPELINE: category-visibility-routing-with-test-mode")
+
+    # Collection always runs for both visibility types, including test mode.
+    public_stored, public_categories = build_news_cache()
+    if public_stored == 0:
+        print("⚠️ Public cache was not refreshed; existing cache is preserved where possible.")
+
+    private_stored = collect_private_news()
+    print(f"📦 Collection totals: public={public_stored}, private={private_stored}")
+
+    # Test mode sends only one public digest to the configured test address.
+    # It never emails every registered user and never mixes private articles
+    # from unrelated category owners into the test digest.
+    if TEST_MODE:
+        _send_test_digest(public_categories)
+        return
+
     try:
         users = get_users_with_email()
     except Exception as exc:
@@ -260,77 +311,36 @@ def run_pipeline():
         print("⚠️ No Auth users with email addresses found.")
         return
 
-    emails_sent = 0
-    emails_failed = 0
-
+    sent = failed = skipped = 0
     for user in users:
         user_id = user.get("user_id")
-        user_email = (user.get("email") or "").strip()
-
-        if not user_id or not user_email:
+        email = (user.get("email") or "").strip()
+        if not user_id or not email:
             continue
 
-        print(f"\n📰 Preparing digest for {user_email}...")
-
+        print(f"\n📰 Preparing personalized digest for {email}...")
         try:
             raw_news = get_news_from_user_sources(user_id)
         except Exception as exc:
-            print(
-                f"❌ News retrieval failed for {user_email}: "
-                f"{type(exc).__name__}: {exc}"
-            )
+            print(f"❌ News retrieval failed for {email}: {type(exc).__name__}: {exc}")
+            failed += 1
             continue
 
-        if not raw_news:
-            print(f"⚠️ No cached news matched {user_email}'s selected sources.")
-            continue
-
-        headlines = []
-        seen_links = set()
-
-        for news in raw_news:
-            link = news.get("link") or ""
-
-            if link and link in seen_links:
-                continue
-            if link:
-                seen_links.add(link)
-
-            item = {
-                "category": news.get("category") or "General",
-                "headline": (
-                    news.get("ai_headline")
-                    or news.get("original_title")
-                    or "Untitled"
-                ),
-                "summary": news.get("ai_summary") or "",
-                "link": link,
-                "source": news.get("source") or "",
-                "image_url": _valid_http_url(news.get("image_url")),
-            }
-
-            headlines.append(item)
-            _log_image("EMAIL PAYLOAD IMAGE", item)
-
+        headlines = _limit_email_articles(_prepare_email_articles(raw_news))
         if not headlines:
-            print(f"⚠️ No valid articles for {user_email}.")
+            print(f"⚠️ No cached articles matched selected sources for {email}.")
+            skipped += 1
             continue
 
         try:
-            send_email(to_email=user_email, headlines=headlines)
-            emails_sent += 1
-            print(f"✅ Digest sent to {user_email} ({len(headlines)} articles).")
+            send_email(to_email=email, headlines=headlines)
+            sent += 1
+            print(f"✅ Digest sent to {email} ({len(headlines)} articles).")
         except Exception as exc:
-            emails_failed += 1
-            print(
-                f"❌ Email failed for {user_email}: "
-                f"{type(exc).__name__}: {exc}"
-            )
+            failed += 1
+            print(f"❌ Email failed for {email}: {type(exc).__name__}: {exc}")
 
-    print(
-        f"\n📬 Delivery complete. Sent: {emails_sent}; "
-        f"failed: {emails_failed}."
-    )
+    print(f"\n📬 Delivery complete. Sent: {sent}; failed: {failed}; skipped: {skipped}.")
 
 
 if __name__ == "__main__":
