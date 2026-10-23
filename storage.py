@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 from supabase_client import supabase
 
-PUBLIC_CATEGORIES = {"tech", "technology", "sports", "movies", "geopolitics", "local"}
+PUBLIC_CATEGORIES = {"tech",  "sports", "movies", "geopolitics", "local"}
 
 
 def _rows(table, columns="*"):
