@@ -18,7 +18,7 @@ from agents.article_deduplicator import deduplicate_articles
 # TEST MODE: when enabled, send only one personalized digest
 # to TEST_EMAIL instead of sending to all real users.
 TEST_EMAIL = "sudharsanreddy.saragada@gmail.com"
-TEST_MODE = False
+TEST_MODE = True
 
 
 def _valid_http_url(value):
@@ -375,7 +375,7 @@ def run_pipeline():
     """Build the shared cache and send personalized digests."""
     print(
         "🚀 NEWS PIPELINE VERSION: "
-        "public-cache-owner-private-feeds-2026-10-20"
+        "selected-category-cache-top-five-per-rss-2026-10-23"
     )
 
     try:
@@ -470,19 +470,9 @@ def run_pipeline():
 
             headlines.append(item)
 
-        # Collect private articles separately for the owner.
-        private_headlines = collect_private_news_for_user(user_id)
-
-        for item in private_headlines:
-            link = (item.get("link") or "").strip()
-
-            if link and link in seen_links:
-                continue
-
-            if link:
-                seen_links.add(link)
-
-            headlines.append(item)
+        # Selected public and private feeds are retrieved from the caches by
+        # get_news_from_user_sources(). Do not fetch private RSS feeds again here;
+        # that would bypass the per-RSS top-five cache selection.
 
         if not headlines:
             print(
