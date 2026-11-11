@@ -12,28 +12,34 @@ GROQ_TIMEOUT_SECONDS = 30
 
 
 def clean_text(text: str) -> str:
-    """Remove HTML tags, URLs and excess whitespace from feed text."""
+    """Remove HTML tags, URLs and excess whitespace."""
     if not text:
         return ""
 
     text = re.sub(r"<.*?>", " ", str(text))
     text = re.sub(r"https?://\S+", " ", text)
     text = re.sub(r"\s+", " ", text)
+
     return text.strip()
 
 
 def _normalize_for_compare(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "", (text or "").lower()).strip()
+    return re.sub(
+        r"[^a-z0-9]+",
+        "",
+        (text or "").lower()
+    ).strip()
 
 
 def _rss_summary_fallback(summary: str, reason: str) -> str:
-    """Return the complete original feed summary when Groq fails."""
+    """Return the complete original RSS summary."""
     print(f"⚠️ Groq summary fallback: {reason}")
     return summary
 
 
 def _validate_summary(result: str) -> str | None:
-    """Accept only three meaningful, correctly sized summary lines."""
+    """Validate the three-line AI-generated summary."""
+
     if not result:
         return None
 
@@ -62,13 +68,7 @@ def _validate_summary(result: str) -> str | None:
 
 
 def generate_ai_summary(article: dict) -> str:
-    """
-    Generate a factual three-line news summary using the model
-    specified in the GROQ_MODEL environment variable.
-
-    If the API key/model is missing, the request fails, or the
-    response fails validation, return the original RSS summary.
-    """
+    """Generate a factual three-line summary using the configured Groq model."""
 
     title = clean_text(
         article.get("title")
@@ -80,25 +80,21 @@ def generate_ai_summary(article: dict) -> str:
         article.get("summary") or ""
     )
 
-    # No RSS summary available.
     if not original_summary:
         return _rss_summary_fallback(
             "",
-            "RSS article has no summary to summarize"
+            "RSS article has no summary"
         )
 
-    # Read API key directly from environment.
+    # Read credentials from environment variables.
     api_key = os.getenv("GROQ_API_KEY", "").strip()
+    model = os.getenv("GROQ_MODEL", "").strip()
 
     if not api_key:
         return _rss_summary_fallback(
             original_summary,
             "GROQ_API_KEY is missing or empty"
         )
-
-    # Read the exact model specified in the environment.
-    # No hardcoded model ID or automatic model substitution.
-    model = os.getenv("GROQ_MODEL", "").strip()
 
     if not model:
         return _rss_summary_fallback(
@@ -110,17 +106,18 @@ def generate_ai_summary(article: dict) -> str:
 Create a genuinely rewritten, factual summary of this news article.
 
 Requirements:
-- Return exactly three separate lines, with no heading, numbering or bullet symbols.
+- Return exactly three separate lines.
+- Do not include headings, numbering or bullet symbols.
 - Each line must contain 12 to 20 words.
-- Line 1: the main event and the key actors.
-- Line 2: the most important details, figures, location or context stated in the source.
-- Line 3: the reported consequence, response or next development, if the source provides one.
-- Use different wording and sentence structure from the supplied RSS summary.
+- Line 1: Main event and key actors.
+- Line 2: Important details, figures, location or context.
+- Line 3: Consequence, response or next development, if available.
+- Use different wording and sentence structure from the RSS summary.
 - Do not copy the RSS summary sentence by sentence.
-- Do not invent details, causes, quotes, figures or conclusions.
-- Preserve uncertainty and attribution words such as "may", "reportedly" and "according to".
-- If the source lacks information for a line, state only what is supported; do not speculate.
-- Use a neutral, concise news-writing style.
+- Never invent details, causes, quotes, figures or conclusions.
+- Preserve uncertainty and attribution.
+- If information is unavailable, do not speculate.
+- Use neutral, concise news-writing style.
 
 Article title:
 {title}
@@ -144,18 +141,18 @@ Rewritten three-line summary:
                 {
                     "role": "system",
                     "content": (
-                        "You are a careful news editor. Summarize only the "
-                        "supplied article information. Never add facts "
-                        "or editorial opinions."
-                    ),
+                        "You are a careful news editor. Summarize only "
+                        "the supplied article information. Never add "
+                        "facts or editorial opinions."
+                    )
                 },
                 {
                     "role": "user",
                     "content": prompt
-                },
+                }
             ],
             temperature=0.3,
-            max_tokens=220,
+            max_tokens=220
         )
 
         result = (
@@ -170,7 +167,7 @@ Rewritten three-line summary:
                 "Groq returned an empty or incorrectly formatted summary"
             )
 
-        # Check whether Groq simply copied the RSS summary.
+        # Detect summaries that are almost identical to the RSS source.
         source_norm = _normalize_for_compare(original_summary)
         result_norm = _normalize_for_compare(validated)
 
@@ -202,19 +199,7 @@ Rewritten three-line summary:
 
 
 def generate_headline(article: dict) -> str:
-    """Use the existing AI headline hook when available, otherwise RSS text."""
-
-    try:
-        ai_headline = generate_ai_headline(article)  # noqa: F821
-
-        if ai_headline and len(ai_headline) <= 120:
-            return ai_headline.strip()
-
-    except Exception as exc:
-        print(
-            f"⚠️ AI headline generation unavailable: "
-            f"{type(exc).__name__}: {exc}"
-        )
+    """Use the original RSS title as the headline."""
 
     title = clean_text(
         article.get("title")
@@ -222,24 +207,27 @@ def generate_headline(article: dict) -> str:
         or ""
     )
 
-    summary = clean_text(
-        article.get("summary") or ""
-    )
+    if title:
+        if len(title) <= 120:
+            return title
 
-    if len(title) <= 90:
-        return title
+        return title[:117].rsplit(" ", 1)[0] + "..."
 
-    return (
-        summary[:87] + "..."
-    ) if summary else title[:90]
+    summary = clean_text(article.get("summary") or "")
+
+    if summary:
+        return summary[:117].rsplit(" ", 1)[0] + "..."
+
+    return "News update"
 
 
 def generate_headlines(articles):
-    """Generate headline and summary pairs for a list of articles."""
+    """Generate headline and summary pairs for articles."""
 
     headlines = []
 
     for article in articles:
+
         headline = generate_headline(article)
         summary = generate_ai_summary(article)
 
