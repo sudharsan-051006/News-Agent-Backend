@@ -268,8 +268,14 @@ def format_email_html(headlines):
     return "".join(html_parts)
 
 
+
 def send_email(to_email, headlines):
     """Send one user's personalized news digest as an HTML email."""
+
+    import ssl
+    import time
+    import smtplib
+
     if not to_email:
         raise ValueError("Recipient email address is required")
 
@@ -281,11 +287,64 @@ def send_email(to_email, headlines):
     html_body = format_email_html(headlines)
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
-        server.ehlo()
-        server.starttls()
-        server.ehlo()
-        server.login(SMTP_USER, SMTP_PASSWORD)
-        server.send_message(msg)
+    for attempt in range(1, 4):
+        server = None
+        stage = "connection"
 
-    print(f"✅ News digest sent to {to_email}")
+        try:
+            print(
+                f"📧 Sending to {to_email} "
+                f"(attempt {attempt}/3)"
+            )
+
+            context = ssl.create_default_context()
+
+            server = smtplib.SMTP(
+                SMTP_HOST,
+                SMTP_PORT,
+                timeout=45
+            )
+
+            stage = "EHLO"
+            server.ehlo()
+            print("✅ SMTP connected")
+
+            stage = "STARTTLS"
+            server.starttls(context=context)
+            server.ehlo()
+            print("✅ TLS established")
+
+            stage = "LOGIN"
+            server.login(
+                SMTP_USER.strip(),
+                SMTP_PASSWORD.strip()
+            )
+            print("✅ Gmail authentication successful")
+
+            stage = "SEND"
+            server.send_message(msg)
+            print(f"✅ Email successfully sent to {to_email}")
+
+            return True
+
+        except Exception as e:
+            print(
+                f"❌ SMTP failure at stage [{stage}] "
+                f"for {to_email}: "
+                f"{type(e).__name__}: {e}"
+            )
+
+            if attempt < 3:
+                delay = 2 ** attempt
+                print(f"⏳ Retrying in {delay} seconds...")
+                time.sleep(delay)
+
+        finally:
+            if server is not None:
+                try:
+                    server.quit()
+                except Exception:
+                    pass
+
+    print(f"❌ All attempts failed for {to_email}")
+    return False
