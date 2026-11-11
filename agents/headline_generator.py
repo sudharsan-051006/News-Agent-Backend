@@ -17,27 +17,13 @@ def clean_text(text: str) -> str:
         return ""
 
     text = re.sub(r"<.*?>", " ", str(text))
-    text = re.sub(r"https?://\\S+", " ", text)
-    text = re.sub(r"\\s+", " ", text)
+    text = re.sub(r"https?://\S+", " ", text)
+    text = re.sub(r"\s+", " ", text)
     return text.strip()
 
 
 def _normalize_for_compare(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", (text or "").lower()).strip()
-
-
-def _is_too_similar(candidate: str, title: str) -> bool:
-    if not candidate or not title:
-        return False
-    candidate_norm = _normalize_for_compare(candidate)
-    title_norm = _normalize_for_compare(title)
-    if not candidate_norm or not title_norm:
-        return False
-    return (
-        candidate_norm == title_norm
-        or candidate_norm in title_norm
-        or title_norm in candidate_norm
-    )
 
 
 def _rss_summary_fallback(summary: str, reason: str) -> str:
@@ -53,7 +39,7 @@ def _validate_summary(result: str) -> str | None:
 
     lines = []
     for raw_line in result.splitlines():
-        line = re.sub(r"^\\s*(?:[-*•]+|\\d+[.)])\\s*", "", raw_line).strip()
+        line = re.sub(r"^\s*(?:[-*•]+|\d+[.)])\s*", "", raw_line).strip()
         if line:
             lines.append(line)
 
@@ -61,16 +47,11 @@ def _validate_summary(result: str) -> str | None:
         return None
 
     for line in lines:
-        word_count = len(re.findall(r"\\b[\\w’'-]+\\b", line))
+        word_count = len(re.findall(r"\b[\w’'-]+\b", line))
         if not 12 <= word_count <= 20:
             return None
 
-    # Reject output that merely repeats the original title.
-    combined = " ".join(lines)
-    if _is_too_similar(combined, ""):
-        return None
-
-    return "\\n".join(lines)
+    return "\n".join(lines)
 
 
 def generate_ai_summary(article: dict) -> str:
@@ -132,7 +113,7 @@ Rewritten three-line summary:
                 {"role": "user", "content": prompt},
             ],
             temperature=0.3,
-            max_completion_tokens=220,
+            max_tokens=220,
         )
 
         result = (response.choices[0].message.content or "").strip()
