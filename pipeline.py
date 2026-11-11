@@ -27,7 +27,7 @@ from agents.email_sender import send_email
 
 
 # ==================== TEST CONFIGURATION ====================
-TEST_MODE = False
+TEST_MODE = True
 TEST_EMAIL = "sudharsanreddy.saragada@gmail.com"
 EMAIL_ARTICLES_PER_SOURCE = 5
 # ===========================================================
