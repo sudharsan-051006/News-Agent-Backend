@@ -1,3 +1,4 @@
+
 import os
 import re
 from difflib import SequenceMatcher
@@ -7,7 +8,6 @@ from groq import Groq
 
 load_dotenv()
 
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 GROQ_TIMEOUT_SECONDS = 30
 
 
@@ -27,9 +27,9 @@ def _normalize_for_compare(text: str) -> str:
 
 
 def _rss_summary_fallback(summary: str, reason: str) -> str:
-    """Return the original feed summary when Groq is unavailable or invalid."""
+    """Return the complete original feed summary when Groq fails."""
     print(f"⚠️ Groq summary fallback: {reason}")
-    return summary[:200]
+    return summary
 
 
 def _validate_summary(result: str) -> str | None:
@@ -38,8 +38,14 @@ def _validate_summary(result: str) -> str | None:
         return None
 
     lines = []
+
     for raw_line in result.splitlines():
-        line = re.sub(r"^\s*(?:[-*•]+|\d+[.)])\s*", "", raw_line).strip()
+        line = re.sub(
+            r"^\s*(?:[-*•]+|\d+[.)])\s*",
+            "",
+            raw_line
+        ).strip()
+
         if line:
             lines.append(line)
 
@@ -48,6 +54,7 @@ def _validate_summary(result: str) -> str | None:
 
     for line in lines:
         word_count = len(re.findall(r"\b[\w’'-]+\b", line))
+
         if not 12 <= word_count <= 20:
             return None
 
@@ -55,22 +62,48 @@ def _validate_summary(result: str) -> str | None:
 
 
 def generate_ai_summary(article: dict) -> str:
-    """Generate a factual three-line news summary with Groq.
-
-    If the API key is missing, the request fails, or the response does not
-    pass validation, return the original RSS summary as a safe fallback.
     """
-    title = clean_text(article.get("title") or article.get("original_title") or "")
-    original_summary = clean_text(article.get("summary") or "")
+    Generate a factual three-line news summary using the model
+    specified in the GROQ_MODEL environment variable.
 
+    If the API key/model is missing, the request fails, or the
+    response fails validation, return the original RSS summary.
+    """
+
+    title = clean_text(
+        article.get("title")
+        or article.get("original_title")
+        or ""
+    )
+
+    original_summary = clean_text(
+        article.get("summary") or ""
+    )
+
+    # No RSS summary available.
     if not original_summary:
-        return _rss_summary_fallback("", "RSS article has no summary to summarize")
+        return _rss_summary_fallback(
+            "",
+            "RSS article has no summary to summarize"
+        )
 
-    api_key = os.getenv("GROQ_API_KEY")
+    # Read API key directly from environment.
+    api_key = os.getenv("GROQ_API_KEY", "").strip()
+
     if not api_key:
         return _rss_summary_fallback(
             original_summary,
-            "GROQ_API_KEY is not configured",
+            "GROQ_API_KEY is missing or empty"
+        )
+
+    # Read the exact model specified in the environment.
+    # No hardcoded model ID or automatic model substitution.
+    model = os.getenv("GROQ_MODEL", "").strip()
+
+    if not model:
+        return _rss_summary_fallback(
+            original_summary,
+            "GROQ_MODEL is missing or empty"
         )
 
     prompt = f"""
@@ -99,78 +132,122 @@ Rewritten three-line summary:
 """.strip()
 
     try:
-        client = Groq(api_key=api_key, timeout=GROQ_TIMEOUT_SECONDS, max_retries=1)
+        client = Groq(
+            api_key=api_key,
+            timeout=GROQ_TIMEOUT_SECONDS,
+            max_retries=1
+        )
+
         response = client.chat.completions.create(
-            model=GROQ_MODEL,
+            model=model,
             messages=[
                 {
                     "role": "system",
                     "content": (
-                        "You are a careful news editor. Summarize only the supplied "
-                        "article information. Never add facts or editorial opinions."
+                        "You are a careful news editor. Summarize only the "
+                        "supplied article information. Never add facts "
+                        "or editorial opinions."
                     ),
                 },
-                {"role": "user", "content": prompt},
+                {
+                    "role": "user",
+                    "content": prompt
+                },
             ],
             temperature=0.3,
             max_tokens=220,
         )
 
-        result = (response.choices[0].message.content or "").strip()
+        result = (
+            response.choices[0].message.content or ""
+        ).strip()
+
         validated = _validate_summary(result)
+
         if not validated:
             return _rss_summary_fallback(
                 original_summary,
-                "Groq returned an empty or incorrectly formatted summary",
+                "Groq returned an empty or incorrectly formatted summary"
             )
 
-        # Guard against a model response that simply copies the feed description.
+        # Check whether Groq simply copied the RSS summary.
         source_norm = _normalize_for_compare(original_summary)
         result_norm = _normalize_for_compare(validated)
+
         if source_norm and result_norm:
-            similarity = SequenceMatcher(None, source_norm, result_norm).ratio()
+            similarity = SequenceMatcher(
+                None,
+                source_norm,
+                result_norm
+            ).ratio()
+
             if similarity >= 0.92:
                 return _rss_summary_fallback(
                     original_summary,
-                    "Groq output was almost identical to the RSS summary",
+                    "Groq output was almost identical to the RSS summary"
                 )
 
-        print(f"✅ Groq summary generated using model {GROQ_MODEL}: {title[:80]}")
+        print(
+            f"✅ Groq summary generated using model {model}: "
+            f"{title[:80]}"
+        )
+
         return validated
 
     except Exception as exc:
         return _rss_summary_fallback(
             original_summary,
-            f"{type(exc).__name__}: {exc}",
+            f"{type(exc).__name__}: {exc}"
         )
 
 
 def generate_headline(article: dict) -> str:
-    """Use the existing AI headline hook when available, otherwise use RSS text."""
+    """Use the existing AI headline hook when available, otherwise RSS text."""
+
     try:
         ai_headline = generate_ai_headline(article)  # noqa: F821
+
         if ai_headline and len(ai_headline) <= 120:
             return ai_headline.strip()
-    except Exception as exc:
-        print(f"⚠️ AI headline generation unavailable: {type(exc).__name__}: {exc}")
 
-    title = clean_text(article.get("title") or article.get("original_title") or "")
-    summary = clean_text(article.get("summary") or "")
+    except Exception as exc:
+        print(
+            f"⚠️ AI headline generation unavailable: "
+            f"{type(exc).__name__}: {exc}"
+        )
+
+    title = clean_text(
+        article.get("title")
+        or article.get("original_title")
+        or ""
+    )
+
+    summary = clean_text(
+        article.get("summary") or ""
+    )
+
     if len(title) <= 90:
         return title
-    return (summary[:87] + "...") if summary else title[:90]
+
+    return (
+        summary[:87] + "..."
+    ) if summary else title[:90]
 
 
 def generate_headlines(articles):
     """Generate headline and summary pairs for a list of articles."""
+
     headlines = []
+
     for article in articles:
         headline = generate_headline(article)
         summary = generate_ai_summary(article)
+
         headlines.append({
             "category": article.get("category", "General"),
             "headline": headline,
             "summary": summary,
             "link": article.get("link", ""),
         })
+
     return headlines
