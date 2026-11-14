@@ -4,16 +4,12 @@ on:
   schedule:
     # 07:00 AM IST = 01:30 AM UTC every day
     - cron: '30 1 * * *'
-  push:
-    branches:
-      - Trend
-      - main
   workflow_dispatch: # Allows manual trigger from GitHub Actions tab
 
 jobs:
   run-daily-briefing:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     steps:
       - name: Checkout Repository
@@ -25,18 +21,29 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: Install Dependencies
+      - name: Install Python Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Install & Start Ollama (Zero API Keys)
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          ollama serve > ollama.log 2>&1 &
+          until curl -s http://localhost:11434/api/tags > /dev/null; do
+            echo "Waiting for Ollama daemon to initialize..."
+            sleep 2
+          done
+          echo "Pulling lightweight CPU-optimized model: llama3.2:3b..."
+          ollama pull llama3.2:3b
+          echo "Ollama is ready and running locally on runner."
+
       - name: Run Trend Radar Pipeline & Dispatch Briefing
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          LLM_PROVIDER: ${{ secrets.LLM_PROVIDER || 'groq' }}
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          GROQ_MODEL: ${{ vars.GROQ_MODEL || 'llama-3.3-70b-versatile' }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          LLM_PROVIDER: "ollama"
+          OLLAMA_MODEL: "llama3.2:3b"
+          OLLAMA_BASE_URL: "http://localhost:11434"
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
           EMAIL_HOST: "smtp.gmail.com"
