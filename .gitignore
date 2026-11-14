@@ -1,0 +1,24 @@
+# Virtual Environment
+venv/
+.venv/
+env/
+
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# CrewAI local caches
+.crewai/
+
+# Environment and sensitive keys
+.env
+*.env.local
+
+# Operating System
+.DS_Store
+Thumbs.db
+
+# Archives
+*.zip

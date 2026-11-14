@@ -1,0 +1,24 @@
+# Core AI & Agent Orchestration
+crewai>=0.80.0
+litellm>=1.40.0
+openai>=1.40.0
+pydantic>=2.7.0
+pydantic-settings>=2.2.0
+
+# Database (Neon Serverless PostgreSQL)
+psycopg2-binary>=2.9.9
+
+# RSS Ingestion & Web Scraping
+feedparser>=6.0.11
+trafilatura>=1.12.0
+lxml_html_clean>=0.4.0
+httpx>=0.27.0
+beautifulsoup4>=4.12.3
+
+# Autonomous Investigative Search Tool
+duckduckgo-search>=6.2.0
+
+# Scheduling & Templating
+apscheduler>=3.10.4
+jinja2>=3.1.4
+python-dotenv>=1.0.1

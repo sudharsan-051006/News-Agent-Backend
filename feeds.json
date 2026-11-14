@@ -1,0 +1,58 @@
+[
+  {
+    "name": "TechCrunch AI",
+    "url": "https://techcrunch.com/category/artificial-intelligence/feed/"
+  },
+  {
+    "name": "Ars Technica",
+    "url": "https://feeds.arstechnica.com/arstechnica/index"
+  },
+  {
+    "name": "MIT Tech Review",
+    "url": "https://www.technologyreview.com/feed/"
+  },
+  {
+    "name": "Hacker News Top",
+    "url": "https://hnrss.org/frontpage"
+  },
+  {
+    "name": "VentureBeat AI",
+    "url": "https://venturebeat.com/category/ai/feed/"
+  },
+  {
+    "name": "BBC World News",
+    "url": "https://feeds.bbci.co.uk/news/world/rss.xml"
+  },
+  {
+    "name": "Foreign Policy",
+    "url": "https://foreignpolicy.com/feed/"
+  },
+  {
+    "name": "Al Jazeera World",
+    "url": "https://www.aljazeera.com/xml/rss/all.xml"
+  },
+  {
+    "name": "The Hindu National",
+    "url": "https://www.thehindu.com/news/national/feeder/default.rss"
+  },
+  {
+    "name": "Indian Express",
+    "url": "https://indianexpress.com/section/india/feed/"
+  },
+  {
+    "name": "LiveMint Policy",
+    "url": "https://www.livemint.com/rss/politics"
+  },
+  {
+    "name": "Economic Times Markets",
+    "url": "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms"
+  },
+  {
+    "name": "LiveMint Markets",
+    "url": "https://www.livemint.com/rss/markets"
+  },
+  {
+    "name": "Yahoo Finance News",
+    "url": "https://finance.yahoo.com/news/rssindex"
+  }
+]
