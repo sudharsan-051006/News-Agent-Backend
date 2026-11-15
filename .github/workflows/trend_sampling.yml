@@ -1,0 +1,63 @@
+name: 4-Hour Trend Momentum Sampling
+
+on:
+  schedule:
+    # Runs every 4 hours automatically (at 00:00, 04:00, 08:00, 12:00, 16:00, 20:00 UTC)
+    - cron: '0 */4 * * *'
+  push:
+    branches:
+      - Trend
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to execute trend sampling from'
+        required: true
+        default: 'Trend'
+
+jobs:
+  sample-trends:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout Repository (Trend Branch)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || 'Trend' }}
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install & Start Ollama (Zero API Keys)
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          ollama serve > ollama.log 2>&1 &
+          until curl -s http://localhost:11434/api/tags > /dev/null; do
+            echo "Waiting for Ollama daemon to initialize..."
+            sleep 2
+          done
+          echo "Pulling lightweight CPU-optimized model: llama3.2:3b..."
+          ollama pull llama3.2:3b
+          echo "Ollama is ready and running locally on runner."
+
+      - name: Sample RSS Feeds & Update Neon DB Trends
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          LLM_PROVIDER: "ollama"
+          OLLAMA_MODEL: "llama3.2:3b"
+          OLLAMA_BASE_URL: "http://localhost:11434"
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          MIN_TREND_VELOCITY_SCORE: "3.0"
+          HF_HUB_DISABLE_SYMLINKS_WARNING: "1"
+          TOKENIZERS_PARALLELISM: "false"
+        run: |
+          python main.py --sample-now
