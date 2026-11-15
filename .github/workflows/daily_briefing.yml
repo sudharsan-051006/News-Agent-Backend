@@ -14,7 +14,7 @@ on:
 jobs:
   run-daily-briefing:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Checkout Repository (Trend Branch)
@@ -63,5 +63,6 @@ jobs:
           MIN_TREND_VELOCITY_SCORE: "3.0"
           HF_HUB_DISABLE_SYMLINKS_WARNING: "1"
           TOKENIZERS_PARALLELISM: "false"
+          PYTHONWARNINGS: "ignore::DeprecationWarning"
         run: |
           python main.py --run-now --force
