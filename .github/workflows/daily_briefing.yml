@@ -54,5 +54,7 @@ jobs:
           ENABLE_SIGNIFICANCE_GATE: "true"
           CRITIC_APPROVAL_THRESHOLD: "8.5"
           MIN_TREND_VELOCITY_SCORE: "3.0"
+          HF_HUB_DISABLE_SYMLINKS_WARNING: "1"
+          TOKENIZERS_PARALLELISM: "false"
         run: |
           python main.py --run-now --force

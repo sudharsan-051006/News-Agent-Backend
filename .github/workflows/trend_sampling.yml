@@ -51,5 +51,7 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
           MIN_TREND_VELOCITY_SCORE: "3.0"
+          HF_HUB_DISABLE_SYMLINKS_WARNING: "1"
+          TOKENIZERS_PARALLELISM: "false"
         run: |
           python main.py --sample-now
