@@ -48,7 +48,7 @@ class Settings(BaseSettings):
 
     # Supabase RSS Sync Settings
     SUPABASE_URL: str = "https://atonkzxonfemlctmtdvo.supabase.co"
-    SUPABASE_KEY: str = ""
+    SUPABASE_KEY: str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF0b25renhvbmZlbWxjdG10ZHZvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2OTkzMTc2OSwiZXhwIjoyMDg1NTA3NzY5fQ.a903mZUoLRxd9A6FajoK0wz7RBI4KyU8Zknl5Yo1Azc"
 
     model_config = SettingsConfigDict(
         env_file=os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"),

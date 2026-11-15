@@ -160,19 +160,26 @@ def sync_feeds_from_config(config_path: str = "feeds.json"):
     if not os.path.exists(file_path):
         logger.warning(f"Feeds config '{config_path}' not found. Seeding defaults.")
         default_feeds = [
-            ("TechCrunch AI", "https://techcrunch.com/category/artificial-intelligence/feed/"),
+            ("The Diplomat", "https://thediplomat.com/feed"),
+            ("UN News", "https://news.un.org/feed/subscribe/en/news/all/rss.xml"),
+            ("BBC World", "https://feeds.bbci.co.uk/news/world/rss.xml"),
+            ("The Hindu", "https://www.thehindu.com/news/feeder/default.rss"),
+            ("NDTV Top Stories", "https://feeds.feedburner.com/ndtvnews-top-stories"),
+            ("Hindustan Times", "https://www.hindustantimes.com/feeds/rss/india-news/rssfeed.xml"),
+            ("Google News India", "https://news.google.com/rss/search?q=india&hl=en-IN&gl=IN&ceid=IN:en"),
+            ("Hollywood Reporter", "https://www.hollywoodreporter.com/feed/"),
+            ("Times of India Movies", "https://timesofindia.indiatimes.com/rssfeeds/1081479906.cms"),
+            ("OTT news", "https://www.filmibeat.com/rss/feeds/ott-fb.xml"),
+            ("Sports Star", "https://sportstar.thehindu.com/feeder/default.rss"),
+            ("NDTV Sports", "https://sports.ndtv.com/rss/cricket"),
+            ("IPL", "https://cricketaddictor.com/indian-premier-league-ipl/feed/"),
+            ("TechCrunch", "https://techcrunch.com/feed/"),
+            ("The Verge", "https://www.theverge.com/rss/index.xml"),
+            ("Hacker News", "https://news.ycombinator.com/rss"),
+            ("Dev.to", "https://dev.to/feed"),
             ("Ars Technica", "https://feeds.arstechnica.com/arstechnica/index"),
-            ("MIT Tech Review", "https://www.technologyreview.com/feed/"),
-            ("Hacker News Top", "https://hnrss.org/frontpage"),
-            ("BBC World News", "https://feeds.bbci.co.uk/news/world/rss.xml"),
-            ("Foreign Policy", "https://foreignpolicy.com/feed/"),
-            ("Al Jazeera World", "https://www.aljazeera.com/xml/rss/all.xml"),
-            ("The Hindu National", "https://www.thehindu.com/news/national/feeder/default.rss"),
-            ("Indian Express", "https://indianexpress.com/section/india/feed/"),
-            ("LiveMint Policy", "https://www.livemint.com/rss/politics"),
-            ("Economic Times Markets", "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms"),
-            ("LiveMint Markets", "https://www.livemint.com/rss/markets"),
-            ("Yahoo Finance News", "https://finance.yahoo.com/news/rssindex")
+            ("Indian Express", "https://indianexpress.com/rss/"),
+            ("ESPN Cricinfo India", "https://www.cricinfo.com/rss/content/story/feeds/6.xml")
         ]
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump([{"name": n, "url": u} for n, u in default_feeds], f, indent=2)
@@ -370,6 +377,49 @@ def get_six_day_topic_baseline() -> Dict[str, float]:
             return {r["topic_name"]: float(r["avg_daily_count"]) for r in rows}
 
 
+_GENERIC_STOPWORDS = {
+    "news", "today", "report", "reports", "reported", "reporting",
+    "says", "said", "saying", "amid", "with", "after", "into", "from", "over",
+    "more", "first", "live", "update", "updates", "week", "year", "time", "back", "next",
+    "will", "have", "been", "being", "their", "there", "about", "could", "would",
+    "national", "world", "india", "indian", "state", "centre", "central",
+    "minister", "chief", "govt", "government", "leader", "party",
+    "general", "public", "people", "daily", "video", "photos", "watch", "read",
+    "ahead", "case", "high", "down", "post", "take", "takes", "taking", "taken",
+    "make", "makes", "making", "made", "affairs", "politics", "business",
+    "mumbai", "delhi", "chennai", "kolkata", "hyderabad", "bengaluru", "punjab", "kerala", "bhopal",
+    "court", "police", "arrest", "arrested", "arrests", "held", "calls", "called",
+    "urges", "urged", "seeks", "sought", "claims", "claimed", "tells", "told"
+}
+
+
+def _extract_tokens(text: str) -> set:
+    import re
+    words = re.findall(r"\b[a-zA-Z]{3,}\b", text.lower())
+    return {w for w in words if w not in _GENERIC_STOPWORDS}
+
+
+def _are_topics_similar(t1: str, t2: str) -> bool:
+    s1 = _extract_tokens(t1)
+    s2 = _extract_tokens(t2)
+    if not s1 or not s2:
+        return False
+    inter = s1 & s2
+    jaccard = len(inter) / len(s1 | s2) if (s1 | s2) else 0.0
+    min_len = min(len(s1), len(s2))
+    overlap = len(inter) / min_len if min_len > 0 else 0.0
+    return jaccard >= 0.35 or (overlap >= 0.5 and len(inter) >= 2)
+
+
+def _is_article_relevant(topic_name: str, article_title: str) -> bool:
+    """Strict validation: An article is ONLY relevant to a topic if it shares at least TWO specific keywords."""
+    t_tok = _extract_tokens(topic_name)
+    a_tok = _extract_tokens(article_title)
+    if not t_tok or not a_tok:
+        return False
+    return len(t_tok & a_tok) >= 2
+
+
 @db_retry(max_retries=3, delay=1.0)
 def record_topic_snapshot(topic_name: str, count: int, trend_type: str, 
                           velocity_score: float, scope: str = "GLOBAL", 
@@ -382,8 +432,6 @@ def record_topic_snapshot(topic_name: str, count: int, trend_type: str,
     if not reference_articles or len(reference_articles) == 0:
         logger.info(f"Skipping topic snapshot '{topic_name}' - 0 reference articles provided.")
         return
-        
-    import re
 
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -395,15 +443,9 @@ def record_topic_snapshot(topic_name: str, count: int, trend_type: str,
             """)
             today_rows = cur.fetchall()
             
-            t_words = set(re.findall(r"\w+", topic_name.lower()))
-            t_words = {w for w in t_words if len(w) > 3 and w not in ["news", "today", "report", "says", "amid", "with", "after"]}
-            
             match_row = None
             for tr in today_rows:
-                tr_words = set(re.findall(r"\w+", tr["topic_name"].lower()))
-                tr_words = {w for w in tr_words if len(w) > 3 and w not in ["news", "today", "report", "says", "amid", "with", "after"]}
-                overlap = len(t_words & tr_words) / len(t_words | tr_words) if (t_words | tr_words) else 0
-                if overlap >= 0.35:
+                if _are_topics_similar(topic_name, tr["topic_name"]):
                     match_row = tr
                     break
 
@@ -411,14 +453,17 @@ def record_topic_snapshot(topic_name: str, count: int, trend_type: str,
                 # Merge into existing topic
                 existing_refs = match_row["reference_articles"] if isinstance(match_row["reference_articles"], list) else []
                 existing_urls = {r.get("url") for r in existing_refs if isinstance(r, dict)}
+                chosen_title = topic_name if len(topic_name) > len(match_row["topic_name"]) else match_row["topic_name"]
+                
                 for r in reference_articles:
                     if isinstance(r, dict) and r.get("url") and r.get("url") not in existing_urls:
-                        existing_refs.append(r)
-                        existing_urls.add(r.get("url"))
+                        # Verify the incoming article actually matches the topic story!
+                        if _is_article_relevant(chosen_title, r.get("title", "")):
+                            existing_refs.append(r)
+                            existing_urls.add(r.get("url"))
 
-                merged_count = match_row["article_count"] + count
+                merged_count = max(len(existing_refs), 1)
                 merged_img = image_url if image_url else (match_row["image_url"] or "")
-                chosen_title = topic_name if len(topic_name) > len(match_row["topic_name"]) else match_row["topic_name"]
 
                 cur.execute("""
                     UPDATE topic_snapshots
@@ -433,7 +478,14 @@ def record_topic_snapshot(topic_name: str, count: int, trend_type: str,
                 conn.commit()
                 return
 
-            # If no existing topic match, insert fresh row
+            # If no existing topic match, filter incoming references to ensure strict story alignment
+            clean_references = [
+                r for r in reference_articles 
+                if isinstance(r, dict) and _is_article_relevant(topic_name, r.get("title", ""))
+            ]
+            if not clean_references:
+                clean_references = reference_articles[:1]
+
             cur.execute("""
                 INSERT INTO topic_snapshots 
                 (topic_name, scope, keywords, article_count, snapshot_date, trend_type, velocity_score, summary, pillar, why_trending, image_url, reference_articles)
@@ -449,7 +501,7 @@ def record_topic_snapshot(topic_name: str, count: int, trend_type: str,
                     why_trending = EXCLUDED.why_trending,
                     image_url = CASE WHEN EXCLUDED.image_url <> '' THEN EXCLUDED.image_url ELSE topic_snapshots.image_url END,
                     reference_articles = EXCLUDED.reference_articles;
-            """, (topic_name, scope, keywords, count, trend_type, velocity_score, summary, pillar, why_trending, image_url, json.dumps(reference_articles, default=str)))
+            """, (topic_name, scope, keywords, len(clean_references), trend_type, velocity_score, summary, pillar, why_trending, image_url, json.dumps(clean_references, default=str)))
             conn.commit()
 
 

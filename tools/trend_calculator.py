@@ -23,8 +23,101 @@ PILLAR_FALLBACK_IMAGES = {
     "Geopolitics": "https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?auto=format&fit=crop&w=1200&q=80",
     "India Affairs": "https://images.unsplash.com/photo-1532375810709-75b1da00537c?auto=format&fit=crop&w=1200&q=80",
     "Finance & Markets": "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=1200&q=80",
+    "Sports": "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=1200&q=80",
+    "Entertainment & Movies": "https://images.unsplash.com/photo-1517604931442-7e0c8ed2963c?auto=format&fit=crop&w=1200&q=80",
+    "Science & Environment": "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=1200&q=80",
     "General News": "https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=1200&q=80"
 }
+
+GENERIC_STOPWORDS = {
+    "news", "today", "report", "reports", "reported", "reporting",
+    "says", "said", "saying", "amid", "with", "after", "into", "from", "over",
+    "more", "first", "live", "update", "updates", "week", "year", "time", "back", "next",
+    "will", "have", "been", "being", "their", "there", "about", "could", "would",
+    "national", "world", "india", "indian", "state", "centre", "central",
+    "minister", "chief", "govt", "government", "leader", "party",
+    "general", "public", "people", "daily", "video", "photos", "watch", "read",
+    "ahead", "case", "high", "down", "post", "take", "takes", "taking", "taken",
+    "make", "makes", "making", "made", "affairs", "politics", "business",
+    "mumbai", "delhi", "chennai", "kolkata", "hyderabad", "bengaluru", "punjab", "kerala", "bhopal",
+    "court", "police", "arrest", "arrested", "arrests", "held", "calls", "called",
+    "urges", "urged", "seeks", "sought", "claims", "claimed", "tells", "told"
+}
+
+BANNED_TOPIC_NAMES = {
+    "india politics", "india affairs", "general news", "global news",
+    "cybersecurity", "entertainment", "india business", "world news",
+    "politics", "business", "breaking news", "daily news"
+}
+
+
+def extract_significant_tokens(text: str) -> set:
+    """Extracts lowercase tokens of length >= 3 excluding generic news stop words."""
+    words = re.findall(r"\b[a-zA-Z]{3,}\b", text.lower())
+    return {w for w in words if w not in GENERIC_STOPWORDS}
+
+
+def are_topics_similar(t1: str, t2: str) -> bool:
+    """
+    Determines if two topic titles represent the exact same story/event.
+    Uses Szymkiewicz-Simpson overlap coefficient and Jaccard token similarity.
+    """
+    s1 = extract_significant_tokens(t1)
+    s2 = extract_significant_tokens(t2)
+    if not s1 or not s2:
+        return False
+    inter = s1 & s2
+    jaccard = len(inter) / len(s1 | s2) if (s1 | s2) else 0.0
+    min_len = min(len(s1), len(s2))
+    overlap = len(inter) / min_len if min_len > 0 else 0.0
+    # Match if high Jaccard OR if the smaller title's keywords are >= 50% contained in the other with at least 2 tokens
+    return jaccard >= 0.35 or (overlap >= 0.5 and len(inter) >= 2)
+
+
+def is_article_relevant_to_topic(topic_name: str, article_title: str) -> bool:
+    """
+    Strict validation: An article is ONLY relevant to a topic if it shares
+    at least TWO specific story keywords. Discards incidental 1-word overlaps (e.g. 'calls', 'mumbai').
+    """
+    t_tok = extract_significant_tokens(topic_name)
+    a_tok = extract_significant_tokens(article_title)
+    if not t_tok or not a_tok:
+        return False
+    return len(t_tok & a_tok) >= 2
+
+
+def select_best_image_for_topic(topic_name: str, articles_list: List[Dict[str, Any]], keywords: List[str] = None) -> str:
+    """
+    Strict image selection: Ensures a topic gets an image from an article
+    whose title actually matches the topic name, preventing photo/headline mismatches!
+    Falls back to Wikimedia / web image search if articles have no relevant image.
+    """
+    t_tok = extract_significant_tokens(topic_name)
+    best_img = ""
+    best_score = 0
+    for a in articles_list:
+        img = a.get("image_url")
+        if not img or not img.startswith("http"):
+            continue
+        a_tok = extract_significant_tokens(a.get("title", ""))
+        score = len(t_tok & a_tok)
+        if score > best_score:
+            best_score = score
+            best_img = img
+
+    if best_img and best_score >= 1:
+        return best_img
+
+    # Fallback to web search for the specific topic headline
+    web_img = find_internet_image(topic_name, keywords or [])
+    if web_img:
+        return web_img
+
+    # If only 1 article exists in the cluster and it has an image, use it
+    if len(articles_list) == 1 and articles_list[0].get("image_url"):
+        return articles_list[0]["image_url"]
+
+    return ""
 
 
 def clean_and_parse_json(raw_text: str) -> Optional[List[Dict[str, Any]]]:
@@ -70,6 +163,7 @@ def discover_dynamic_topics(articles: List[Dict[str, Any]]) -> List[Dict[str, An
     """
     Uses LLM to perform zero-shot dynamic event discovery across all ingested headlines.
     Discovers specific event categories on-the-fly rather than forcing static buckets.
+    Enforces strict event-level cohesion and prunes unrelated articles.
     """
     valid_articles = [a for a in articles[:50] if a.get("title")]
     sample_headlines = [
@@ -83,10 +177,13 @@ Analyze the following list of news headlines from today collected across multipl
 Your job is to cluster them into distinct, descriptive dynamic topic categories and autonomously identify their true topic domain.
 
 CRITICAL RULES:
-1. AGGRESSIVE MERGING: If multiple headlines report on the SAME real-world event or story (e.g. multiple outlets reporting on Sooryavanshi captaincy, Yes Bank fraud denial, Gurnoor Brar in Test squad, or Stiglitz at HTLS), you MUST combine all their IDs into ONE single topic object! Do NOT output separate duplicate topics for the same story.
-2. EXACT ARTICLE IDS: The "article_ids" array MUST contain the EXACT integer "id" values (1 to {len(sample_headlines)}) corresponding to the headlines covering this event from the list below. EVERY topic must include its matching article IDs.
-3. "topic_name": Descriptive 3-6 word event title (e.g. 'Cyclone Dana Coastal Landfall', 'UN Security Council Truce', 'IPL Mega Auction Trades', 'OpenAI Claude Lawsuit', 'Box Office Opening Record').
-4. "pillar": Dynamically identify and assign the natural category based strictly on the content of the story. Examples:
+1. STRICT EVENT-LEVEL CLUSTERING:
+   - Multiple headlines should ONLY be grouped together if they report on the EXACT SAME SPECIFIC STORY OR EVENT (e.g. multiple outlets covering 'SpaceX Starship Booster Catch', 'OpenAI Claude Lawsuit', or 'Delhi Air Quality Hazard').
+   - NEVER create broad, vague buckets like 'India Politics', 'India Affairs', 'General News', 'Global News', 'Cybersecurity', or 'Entertainment'. Every topic name MUST describe the specific event (e.g. 'President Murmu and PM Modi Greet Jharkhand on Foundation Day', 'Italian Antitrust Fines Meta Over Photos').
+   - If an article is reporting on a standalone story, KEEP IT AS ITS OWN SINGLE-ARTICLE TOPIC (with article_ids containing just that 1 ID). NEVER dump unrelated headlines into a single topic.
+2. EXACT ARTICLE IDS: The "article_ids" array MUST contain the EXACT integer "id" values (1 to {len(sample_headlines)}) corresponding to the headlines covering that specific event.
+3. "topic_name": Specific, descriptive 3-7 word event title (e.g. 'Delhi Air Quality Reaches Hazardous AQI', 'SpaceX Starship Caught by Launchpad Arms', 'Uttarakhand MLA Throws Microphone in Assembly').
+4. "pillar": Dynamically identify and assign the natural category based strictly on the story:
    - "Technology & AI"
    - "Geopolitics & Security"
    - "India Affairs"
@@ -95,9 +192,9 @@ CRITICAL RULES:
    - "Entertainment & Movies"
    - "Science & Environment"
 5. "scope": Classify as "INDIA" or "GLOBAL".
-6. "why_trending": 1-2 clear sentences explaining the EXACT CATALYST or EVENT—specifically WHY this story broke out in the news today.
-7. "summary": 1-2 sentence objective summary of the event.
-8. "keywords": 3-5 core keywords.
+6. "why_trending": 1-2 clear sentences explaining the EXACT CATALYST or EVENT that occurred today.
+7. "summary": 1-2 sentence objective factual summary.
+8. "keywords": 3-5 core keywords specific to the event.
 9. "article_ids": list of integer IDs from the input that belong to this topic.
 
 HEADLINES:
@@ -123,75 +220,106 @@ Return ONLY a valid JSON array of objects with keys:
         
         clusters = clean_and_parse_json(raw_response)
         if clusters:
-            logger.info(f"Successfully discovered {len(clusters)} dynamic event categories.")
+            logger.info(f"Successfully discovered {len(clusters)} raw event categories from LLM.")
             
             # Map back article data to each cluster (supporting 1-based and 0-based LLM quirks)
             id_to_article = {idx + 1: a for idx, a in enumerate(valid_articles)}
             
+            processed_clusters = []
+            used_article_guids = set()
+
             for c in clusters:
+                t_name = c.get("topic_name", "").strip()
                 assigned = []
                 for aid in c.get("article_ids", []):
                     art = id_to_article.get(aid) or (valid_articles[aid] if 0 <= aid < len(valid_articles) else None)
-                    if art and art not in assigned:
+                    if art and art.get("guid") and art["guid"] not in [x.get("guid") for x in assigned]:
                         assigned.append(art)
                 
-                # Content alignment & verification check:
-                # Prevent index-shift bugs where a topic gets assigned an unrelated article (e.g. Ukraine assigned Amtrak)
-                t_words = set(re.findall(r"\w+", c.get("topic_name", "").lower()))
-                t_words = {w for w in t_words if len(w) > 3 and w not in ["news", "today", "report", "says", "amid", "with", "after"]}
-                
-                is_valid = False
-                if assigned:
-                    for a in assigned:
-                        a_words = set(re.findall(r"\w+", a.get("title", "").lower()))
-                        if not t_words or (t_words & a_words):
-                            is_valid = True
-                            break
-                
-                if not is_valid:
-                    # Index was shifted or empty! Find the true matching article from input by word overlap
-                    logger.warning(f"Re-aligning articles for topic '{c.get('topic_name')}' by title similarity.")
+                # If topic name is generic (e.g. "India Politics"), rename using primary article's title
+                if t_name.lower() in BANNED_TOPIC_NAMES or len(extract_significant_tokens(t_name)) < 2:
+                    if assigned:
+                        t_name = assigned[0].get("title", t_name)[:65]
+                        c["topic_name"] = t_name
+
+                # Strict per-article verification:
+                # Every article in assigned MUST match the topic's specific story!
+                verified_articles = []
+                for a in assigned:
+                    if is_article_relevant_to_topic(t_name, a.get("title", "")):
+                        verified_articles.append(a)
+                        used_article_guids.add(a.get("guid"))
+                    else:
+                        logger.warning(f"Pruned unrelated article '{a.get('title')}' from topic '{t_name}'")
+
+                # If no articles passed verification, realign with the single best matching article
+                if not verified_articles and valid_articles:
                     best_art = None
                     best_score = 0
+                    t_tok = extract_significant_tokens(t_name)
                     for a in valid_articles:
-                        a_words = set(re.findall(r"\w+", a.get("title", "").lower()))
-                        score = len(t_words & a_words)
+                        a_tok = extract_significant_tokens(a.get("title", ""))
+                        score = len(t_tok & a_tok)
                         if score > best_score:
                             best_score = score
                             best_art = a
-                    if best_art and best_score > 0:
-                        assigned = [best_art]
+                    if best_art and best_score >= 1:
+                        verified_articles = [best_art]
+                        used_article_guids.add(best_art.get("guid"))
 
-                c["articles"] = assigned
-                c["article_count"] = max(len(assigned), 1)
+                if verified_articles:
+                    c["articles"] = verified_articles
+                    c["article_count"] = len(verified_articles)
+                    processed_clusters.append(c)
 
-            # Intra-run deduplication: Merge duplicate clusters for the same event
+            # Intra-run deduplication: Merge clusters reporting on the same event
             merged_clusters = []
-            for c in clusters:
-                c_words = set(re.findall(r"\w+", c.get("topic_name", "").lower()))
-                c_words = {w for w in c_words if len(w) > 3 and w not in ["news", "today", "report", "says", "amid", "with", "after"]}
-                
+            for c in processed_clusters:
                 merged = False
                 for existing in merged_clusters:
-                    e_words = set(re.findall(r"\w+", existing.get("topic_name", "").lower()))
-                    e_words = {w for w in e_words if len(w) > 3 and w not in ["news", "today", "report", "says", "amid", "with", "after"]}
-                    
-                    overlap = len(c_words & e_words) / len(c_words | e_words) if (c_words | e_words) else 0
-                    if overlap >= 0.35:
+                    if are_topics_similar(c.get("topic_name", ""), existing.get("topic_name", "")):
                         logger.info(f"Merging duplicate clusters: '{c.get('topic_name')}' into '{existing.get('topic_name')}'")
-                        existing_urls = {a.get("url") for a in existing.get("articles", [])}
+                        existing_guids = {a.get("guid") for a in existing.get("articles", [])}
                         for a in c.get("articles", []):
-                            if a.get("url") and a.get("url") not in existing_urls:
+                            if a.get("guid") and a.get("guid") not in existing_guids:
                                 existing["articles"].append(a)
-                                existing_urls.add(a.get("url"))
+                                existing_guids.add(a.get("guid"))
                         existing["article_count"] = len(existing["articles"])
+                        # Retain the more descriptive title
+                        if len(c.get("topic_name", "")) > len(existing.get("topic_name", "")):
+                            existing["topic_name"] = c.get("topic_name")
                         merged = True
                         break
-                
                 if not merged:
                     merged_clusters.append(c)
 
-            # Ensure strictly non-empty clusters with at least one verified reference article
+            # Add any valid articles that were unassigned or pruned as clean 1-mention seed topics
+            for a in valid_articles:
+                if a.get("guid") and a["guid"] not in used_article_guids:
+                    # Check if already covered by an existing cluster
+                    already_covered = False
+                    for mc in merged_clusters:
+                        if is_article_relevant_to_topic(mc.get("topic_name", ""), a.get("title", "")):
+                            if a["guid"] not in {x.get("guid") for x in mc.get("articles", [])}:
+                                mc["articles"].append(a)
+                                mc["article_count"] = len(mc["articles"])
+                            already_covered = True
+                            break
+                    if not already_covered:
+                        title = a.get("title", "")
+                        is_india = any(w in title.lower() for w in ["india", "delhi", "mumbai", "modi", "rupee", "sebi"])
+                        merged_clusters.append({
+                            "topic_name": title[:65],
+                            "pillar": a.get("primary_topic") or ("India Affairs" if is_india else "General News"),
+                            "scope": "INDIA" if is_india else "GLOBAL",
+                            "why_trending": f"Breaking report covered by {a.get('feed_name', 'major news feeds')}.",
+                            "summary": title,
+                            "keywords": list(extract_significant_tokens(title))[:4],
+                            "article_count": 1,
+                            "articles": [a]
+                        })
+                        used_article_guids.add(a["guid"])
+
             return [c for c in merged_clusters if c.get("articles") and len(c["articles"]) > 0]
         else:
             logger.warning("Failed to parse JSON clusters from LLM. Falling back to rule-based fallback.")
@@ -225,7 +353,7 @@ def fallback_clustering(articles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
         is_india = cat == "India Affairs" or any(w in t_lower for w in ["india", "delhi", "mumbai", "modi", "rupee", "sebi", "nifty", "sensex"])
         clusters.append({
-            "topic_name": title[:60],
+            "topic_name": title[:65],
             "pillar": cat,
             "scope": "INDIA" if is_india else "GLOBAL",
             "why_trending": f"Breaking coverage reported across {a.get('feed_name', 'major news feeds')}.",
@@ -240,7 +368,7 @@ def fallback_clustering(articles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 def process_and_rank_trends(dynamic_topics: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
     1. Computes velocity scores for each dynamic topic against the 6-day baseline in Neon DB.
-    2. Stores EVERY topic into Neon DB with images, why_trending, pillar, and reference links.
+    2. Stores EVERY topic into Neon DB with strictly matched images, why_trending, pillar, and reference links.
     3. Returns Top 5 Global and Top 5 India trending topics.
     """
     baseline_6d = get_six_day_topic_baseline()
@@ -253,21 +381,13 @@ def process_and_rank_trends(dynamic_topics: List[Dict[str, Any]]) -> Dict[str, A
         scope = t.get("scope", "GLOBAL").upper()
         pillar = t.get("pillar", "General News")
         why_trending = t.get("why_trending", "")
-        count = t.get("article_count", 1)
         keywords = t.get("keywords", [])
         summary = t.get("summary", "")
         articles_list = t.get("articles", [])
+        count = len(articles_list) if articles_list else t.get("article_count", 1)
 
-        # Extract best high-res image from cluster articles
-        image_url = ""
-        for a in articles_list:
-            if a.get("image_url"):
-                image_url = a["image_url"]
-                break
-
-        # If articles lack an image, autonomously search the internet for a relevant image!
-        if not image_url:
-            image_url = find_internet_image(topic_name, keywords)
+        # Strictly select image that matches the headline content
+        image_url = select_best_image_for_topic(topic_name, articles_list, keywords)
 
         # Fallback to high-res pillar editorial image if internet search returns nothing
         if not image_url:
