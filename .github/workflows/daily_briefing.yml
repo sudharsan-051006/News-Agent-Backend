@@ -4,7 +4,12 @@ on:
   schedule:
     # 07:00 AM IST = 01:30 AM UTC every day
     - cron: '30 1 * * *'
-  workflow_dispatch: # Allows manual trigger from GitHub Actions tab
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to execute briefing from'
+        required: true
+        default: 'Trend'
 
 jobs:
   run-daily-briefing:
@@ -12,8 +17,10 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout Repository (Trend Branch)
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || 'Trend' }}
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5

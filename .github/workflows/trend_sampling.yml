@@ -7,8 +7,12 @@ on:
   push:
     branches:
       - Trend
-      - main
-  workflow_dispatch: # Allows manual run anytime
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to execute trend sampling from'
+        required: true
+        default: 'Trend'
 
 jobs:
   sample-trends:
@@ -16,8 +20,10 @@ jobs:
     timeout-minutes: 25
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout Repository (Trend Branch)
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || 'Trend' }}
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
