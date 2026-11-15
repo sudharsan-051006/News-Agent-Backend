@@ -190,42 +190,59 @@ def run_trend_radar_pipeline(force: bool = False):
     # =====================================================================
     # Step 5: Autonomous Go / No-Go Decision Gate & Email Dispatch
     # =====================================================================
+    import re
     top_global = trend_results.get("top_5_global", [])
     top_india = trend_results.get("top_5_india", [])
     top_trend_name = top_global[0]["topic_name"] if top_global else (top_india[0]["topic_name"] if top_india else "Emerging Shifts")
     
     critic_upper = (critic_verdict or "").upper()
+    score_match = re.search(r'final score:?\s*\*?\*?\s*(\d+(?:\.\d+)?)', critic_upper, re.IGNORECASE)
+    critic_score = float(score_match.group(1)) if score_match else 7.0
+
     has_go = (
         "DECISION: GO" in critic_upper
         or "DECISION:GO" in critic_upper
         or "VERDICT: GO" in critic_upper
         or "STATUS: APPROVED" in critic_upper
         or "DECISION: APPROVE" in critic_upper
+        or critic_score >= settings.CRITIC_APPROVAL_THRESHOLD
     )
     is_go = has_go or not settings.ENABLE_SIGNIFICANCE_GATE
 
     if is_go:
-        logger.info("Autonomous Gatekeeper APPROVED dispatch (Decision: GO).")
+        logger.info(f"Autonomous Gatekeeper APPROVED dispatch (Decision: GO, Score: {critic_score}).")
         subject = f"[Daily Trend Radar] {top_trend_name} & Emerging Shifts — {datetime.now().strftime('%b %d')}"
         exec_summary = f"Macro intelligence analysis across {len(articles_24h)} stories over the last 24h against our 6-day baseline."
         
+        # Prefer the Critic's rewritten & approved text if available, otherwise editor draft
+        content_to_send = editor_draft
+        if "approved briefing text" in (critic_verdict or "").lower():
+            try:
+                parts = re.split(r'approved briefing text:?', critic_verdict, flags=re.IGNORECASE)
+                if len(parts) > 1:
+                    rewritten = parts[1].split("**Final Score")[0].strip()
+                    if len(rewritten) > 200:
+                        content_to_send = rewritten
+            except Exception:
+                pass
+
         # Clean up Markdown linebreaks for HTML cards
-        body_html = f"<div class='card' style='line-height:1.6;'>{editor_draft.replace(chr(10), '<br>')}</div>"
+        body_html = f"<div class='card' style='line-height:1.6;'>{content_to_send.replace(chr(10), '<br>')}</div>"
         
         delivered = send_trend_email(subject, exec_summary, body_html)
         log_audit_decision(
             decision="DISPATCHED" if delivered else "DELIVERY_FAILED",
-            critic_score=9.0,
+            critic_score=critic_score,
             critic_feedback=critic_verdict[:500],
             email_subject=subject,
             top_trend=top_trend_name
         )
     else:
-        logger.warning("Autonomous Gatekeeper SUPPRESSED dispatch (Decision: NO_GO). News is flat or below threshold.")
+        logger.warning(f"Autonomous Gatekeeper SUPPRESSED dispatch (Decision: NO_GO, Score: {critic_score}). News is flat or below threshold.")
         logger.info(f"Critic Gatekeeper Feedback:\n{critic_verdict}")
         log_audit_decision(
             decision="SUPPRESSED_LOW_SIGNAL",
-            critic_score=7.0,
+            critic_score=critic_score,
             critic_feedback=critic_verdict[:500],
             top_trend=top_trend_name
         )

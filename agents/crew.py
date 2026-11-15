@@ -9,8 +9,14 @@ Supports:
 
 import json
 import logging
+import warnings
 from datetime import datetime
 from typing import Dict, Any, List
+
+# Suppress noisy internal CrewAI deprecation warnings on runner consoles
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
+
 from crewai import Agent, Task, Crew, Process
 from crewai.tools import tool
 from llm_adapter import get_crewai_llm
@@ -34,6 +40,7 @@ def get_agents():
         goal="Select and prioritize the Top 5 Global and Top 5 India trending storylines based on real velocity data.",
         backstory="You are an elite intelligence researcher who works strictly with factual evidence. You ground your findings entirely in today's real news.",
         llm=llm,
+        max_iter=1,
         verbose=True
     )
 
@@ -43,6 +50,7 @@ def get_agents():
         backstory="You verify claims, locate primary sources, and confirm authenticity using web search.",
         tools=[search_tool],
         llm=llm,
+        max_iter=2,
         verbose=True
     )
 
@@ -51,6 +59,7 @@ def get_agents():
         goal="Craft an executive intelligence briefing showcasing the Top 5 Global and Top 5 India Trending Topics with 'Why It Matters'.",
         backstory="You write high-signal executive newsletters for top leaders, grounding every word strictly in today's real news.",
         llm=llm,
+        max_iter=1,
         verbose=True
     )
 
@@ -59,6 +68,7 @@ def get_agents():
         goal="Audit the briefing against strict standards: ensure 100% factual grounding in today's news and decide GO/NO_GO.",
         backstory="You reject any draft containing outdated or fabricated stories. You only approve briefings backed by today's real feed items.",
         llm=llm,
+        max_iter=1,
         verbose=True
     )
 
