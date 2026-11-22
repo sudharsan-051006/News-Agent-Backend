@@ -138,12 +138,15 @@ def run_fiction_pipeline(
     except Exception as exc:
         err_msg = f"{str(exc)}\n{traceback.format_exc()}"
         logger.error(f"Fiction Pipeline Job {job_id} failed: {err_msg}")
-        update_job_run(
-            job_id,
-            status="FAILED",
-            progress_pct=100,
-            stage="FAILED",
-            error_message=err_msg[:500]
-        )
+        try:
+            update_job_run(
+                job_id,
+                status="FAILED",
+                progress_pct=100,
+                stage="FAILED",
+                error_message=err_msg[:500]
+            )
+        except Exception as db_exc:
+            logger.error(f"Failed to record job failure in DB: {db_exc}")
         summary["error"] = str(exc)
         return summary

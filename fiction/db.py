@@ -765,11 +765,13 @@ def update_job_run(
     job_id: int,
     status: str,
     progress_pct: int,
-    current_stage: str,
+    current_stage: str = "PROCESSING",
+    stage: Optional[str] = None,
     result_summary: Dict[str, Any] = None,
     error_message: Optional[str] = None
 ):
     """Updates background job progress or outcome."""
+    effective_stage = stage or current_stage
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("""
@@ -781,7 +783,7 @@ def update_job_run(
                     error_message = %s,
                     updated_at = NOW()
                 WHERE id = %s;
-            """, (status, progress_pct, current_stage, json.dumps(result_summary) if result_summary else None, error_message, job_id))
+            """, (status, progress_pct, effective_stage, json.dumps(result_summary) if result_summary else None, error_message, job_id))
             conn.commit()
 
 
