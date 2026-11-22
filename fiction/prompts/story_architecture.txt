@@ -1,0 +1,58 @@
+You are a master story architect and showrunner.
+Turn the selected fictional scenario into a complete, multi-chapter long-form novel architecture.
+
+SCENARIO DETAILS:
+Title: {title}
+Genre: {genre}
+Logline: {logline}
+Premise: {premise}
+Verified Facts Used: {verified_facts}
+Fictional Assumptions: {fictional_assumptions}
+Fictional Characters Seed: {fictional_characters}
+Central Conflict: {central_conflict}
+Narrative Stakes: {narrative_stakes}
+
+ARCHITECTURAL REQUIREMENTS:
+1. CHARACTERS: Fleshed-out character blueprints (Protagonist, Antagonist, Allies, Informants) with psychological motivations, backstories, and conflicts.
+2. RELATIONSHIPS: Relational dynamics between characters (e.g. former partners, mutual distrust, hidden loyalties).
+3. CHAPTER PROGRESSION: A 4 to 6 chapter structured narrative arc (Act I Hook, Act II Complications & Revelations, Act III Climax & Resolution).
+4. CONTINUITY HOOKS: For each chapter, specify the focal point, setting, and key narrative revelations.
+5. MANDATORY DISCLAIMER: Must include the standard fiction disclaimer.
+
+OUTPUT FORMAT:
+Return a valid JSON object matching this schema:
+{{
+  "title": "string",
+  "genre": "string",
+  "synopsis": "string (comprehensive novel synopsis)",
+  "world_setting": "string (time, atmospheric locations, technological/political backdrop)",
+  "central_conflict": "string",
+  "ending_plan": "string",
+  "characters": [
+    {{
+      "name": "string",
+      "role": "PROTAGONIST | ANTAGONIST | ALLY | MENTOR | INVESTIGATOR",
+      "description": "string",
+      "motivations": "string",
+      "is_fictional": true
+    }}
+  ],
+  "relationships": [
+    {{
+      "character_a": "string",
+      "character_b": "string",
+      "relationship_type": "string",
+      "description": "string"
+    }}
+  ],
+  "chapters": [
+    {{
+      "chapter_number": 1,
+      "title": "string",
+      "summary": "string (what happens in this chapter)",
+      "focal_character": "string",
+      "key_revelations": ["string"]
+    }}
+  ],
+  "disclaimer": "This is a fictional story inspired by real-world news events. The narrative connections, characters, motives, and developments are invented and do not imply that the underlying news events are causally related."
+}}

@@ -1,0 +1,33 @@
+You are an executive fiction editor and factual integrity auditor.
+Evaluate the following generated fictional scenario based on 7 rigorous criteria on a scale of 0.0 to 10.0:
+
+1. event_coverage: Does the premise meaningfully utilize the underlying cluster events rather than ignoring them?
+2. narrative_coherence: Is the plot logically structured, believable within its genre, and engaging?
+3. originality: Does it avoid tired cliches and generic tropes?
+4. genre_suitability: Does it execute the tropes and atmosphere of its declared genre effectively?
+5. diversity: Is this premise distinct from typical news recaps?
+6. source_traceability: Are real events cleanly cited and distinguishable from fictional drama?
+7. fact_fiction_separation: Does it strictly protect real individuals/nations from fabricated criminal allegations by using fictional characters for wrongdoing? (Score 0 if real living people are depicted committing crimes without proof).
+
+SCENARIO TO EVALUATE:
+Title: {title}
+Genre: {genre}
+Logline: {logline}
+Premise: {premise}
+Fictional Assumptions: {fictional_assumptions}
+Characters: {fictional_characters}
+
+OUTPUT FORMAT:
+Return a valid JSON object:
+{{
+  "event_coverage": 8.5,
+  "narrative_coherence": 9.0,
+  "originality": 8.0,
+  "genre_suitability": 9.0,
+  "diversity": 8.5,
+  "source_traceability": 9.0,
+  "fact_fiction_separation": 10.0,
+  "total_score": 8.85,
+  "feedback": "string explaining strengths, weaknesses, and factual integrity check",
+  "is_approved": true
+}}

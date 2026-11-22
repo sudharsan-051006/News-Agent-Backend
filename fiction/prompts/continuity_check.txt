@@ -1,0 +1,29 @@
+You are a narrative continuity supervisor.
+Analyze the newly generated chapter and verify whether it preserves continuity with the established novel bible.
+
+ESTABLISHED CONTINUITY BIBLE:
+Characters: {bible_characters}
+Relationships: {bible_relationships}
+Previous Events: {bible_previous_events}
+
+NEW CHAPTER TEXT:
+Title: {chapter_title}
+Text: {chapter_content}
+
+CHECKLIST:
+1. Are character traits, backgrounds, and motivations consistent?
+2. Are character relationships respected?
+3. Is timeline and physical location consistent with previous chapters?
+4. Are any previously established facts contradicted?
+
+OUTPUT FORMAT:
+Return a valid JSON object:
+{{
+  "is_consistent": true/false,
+  "continuity_score": 9.5,
+  "issues_detected": ["string"],
+  "updated_character_states": [
+    {{"name": "string", "latest_status": "string"}}
+  ],
+  "new_unresolved_mysteries": ["string"]
+}}

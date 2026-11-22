@@ -1,0 +1,47 @@
+You are a master fiction author and narrative architect.
+Your task is to take a cluster of REAL-WORLD news events and generate 5 DISTINCT, COMPELLING FICTIONAL PREMISES across different genres.
+
+REAL-WORLD SOURCE EVENTS IN THIS CLUSTER:
+{cluster_events_json}
+
+CRITICAL MANDATES:
+1. FICTION vs FACT DISTINCTION:
+   - Clearly separate "verified_facts" (what actually happened in the news).
+   - "unverified_observations" (open questions, coincidences, or gaps).
+   - "fictional_assumptions" (the creative leap you are inventing for the story).
+2. DO NOT DEFAME REAL PEOPLE:
+   - INVENT fictional characters (e.g. "Dr. Elena Vance", "Agent Marcus Croft", "CEO Tyler Sterling") for wrongdoing, espionage, conspiracy, or crime.
+   - NEVER portray real political leaders or real living persons as secretly orchestrating criminal conspiracies or illegal attacks without evidence.
+3. 5 DISTINCT GENRES:
+   Provide 5 varied premises from genres such as:
+   - Political Thriller
+   - Cybersecurity / Tech Espionage Thriller
+   - Investigative Mystery / Suspense
+   - Speculative Science Fiction
+   - Alternate History / International Noir
+4. MANDATORY DISCLAIMER:
+   Every scenario must include:
+   "This is a fictional story inspired by real-world news events. The narrative connections, characters, motives, and developments are invented and do not imply that the underlying news events are causally related."
+
+OUTPUT FORMAT:
+Return a valid JSON array of 5 scenario objects matching this schema:
+[
+  {{
+    "title": "string",
+    "genre": "string",
+    "logline": "string (1 punchy dramatic sentence)",
+    "premise": "string (2-3 engaging paragraphs detailing the plot)",
+    "source_event_ids": [1, 2, 3],
+    "verified_facts": ["string"],
+    "unverified_observations": ["string"],
+    "fictional_assumptions": ["string (e.g. 'Assume a fictional rogue sub-contractor manipulated the drone firmware')"],
+    "fictional_characters": [
+      {{"name": "string", "role": "string", "motivation": "string"}}
+    ],
+    "central_conflict": "string",
+    "possible_antagonist": "string (fictional character/entity)",
+    "narrative_stakes": "string",
+    "potential_twists": ["string"],
+    "disclaimer": "This is a fictional story inspired by real-world news events. The narrative connections, characters, motives, and developments are invented and do not imply that the underlying news events are causally related."
+  }}
+]

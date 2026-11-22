@@ -271,10 +271,22 @@ def start_scheduler():
         id='daily_7am_briefing_job'
     )
 
+    # Job 3: Weekly News-to-Fiction Engine Generation (Sundays at 08:00 AM)
+    from fiction.pipeline import run_fiction_pipeline
+    scheduler.add_job(
+        run_fiction_pipeline,
+        'cron',
+        day_of_week='sun',
+        hour=8,
+        minute=0,
+        id='weekly_fiction_pipeline_job'
+    )
+
     logger.info("==============================================================")
     logger.info(f"⚡ Scheduler Active:")
     logger.info(f"  1. Trend Sampling & DB Ingestion: Every {settings.SAMPLING_INTERVAL_HOURS} hours")
     logger.info(f"  2. Daily Email Briefing: Every morning at {settings.DAILY_RUN_HOUR:02d}:{settings.DAILY_RUN_MINUTE:02d} AM")
+    logger.info(f"  3. Weekly Fiction Engine: Every Sunday at 08:00 AM")
     logger.info("==============================================================")
 
     try:
@@ -284,15 +296,42 @@ def start_scheduler():
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="AI News Trend Radar Agent")
+    parser = argparse.ArgumentParser(description="AI News Trend Radar & Fiction Engine Agent")
     parser.add_argument("--run-now", action="store_true", help="Execute the 7:00 AM daily email briefing immediately.")
     parser.add_argument("--sample-now", action="store_true", help="Execute the 4-hour background trend sampling immediately.")
+    parser.add_argument("--fiction-run-now", action="store_true", help="Execute the Fiction Engine pipeline immediately.")
+    parser.add_argument("--eval-run", action="store_true", help="Execute full News-to-Fiction evaluation and benchmark suite.")
+    parser.add_argument("--api", action="store_true", help="Start the FastAPI backend server on port 8000.")
+    parser.add_argument("--port", type=int, default=8000, help="Port for the FastAPI backend server.")
     parser.add_argument("--force", action="store_true", help="Clear checkpoints and run 7 AM briefing from scratch.")
-    parser.add_argument("--daemon", action="store_true", help="Start the 4-hour + daily 7:00 AM background scheduler.")
+    parser.add_argument("--daemon", action="store_true", help="Start the 4-hour + daily 7:00 AM + weekly fiction background scheduler.")
 
     args = parser.parse_args()
 
-    if args.run_now:
+    if args.api:
+        import uvicorn
+        logger.info(f"Starting Elinity API server on port {args.port}...")
+        uvicorn.run("api:app", host="0.0.0.0", port=args.port, reload=True)
+    elif args.eval_run:
+        from fiction.evaluation.evaluator import execute_evaluation_run
+        logger.info("Executing News-to-Fiction Engine Evaluation Run...")
+        result = execute_evaluation_run()
+        print(f"\n=======================================================")
+        print(f"EVALUATION RUN COMPLETE: {result.run_id}")
+        print(f"Status: {result.status} | Total Evaluated: {result.total_cases}")
+        print(f"Release Gate: {'✅ PASSED' if result.release_ready else '🛑 BLOCKED'}")
+        if result.gate_block_reasons:
+            print("Gate Block Reasons:")
+            for reason in result.gate_block_reasons:
+                print(f"  - {reason}")
+        print(f"Execution Time: {result.total_duration_seconds:.2f}s | Estimated Cost: ${result.total_cost_usd:.4f}")
+        print(f"=======================================================\n")
+    elif args.fiction_run_now:
+        from fiction.pipeline import run_fiction_pipeline
+        logger.info("Executing Fiction Engine pipeline immediately...")
+        res = run_fiction_pipeline()
+        print("Fiction Pipeline Result:", res)
+    elif args.run_now:
         run_trend_radar_pipeline(force=args.force)
     elif args.sample_now:
         job_sample_and_update_trends()
@@ -300,7 +339,9 @@ if __name__ == "__main__":
         start_scheduler()
     else:
         print("Please specify an action:")
-        print("  --run-now    : Run 7 AM daily email briefing immediately.")
-        print("  --sample-now : Run 4-hour trend sampling immediately.")
-        print("  --daemon     : Start the background scheduler (every 4h + 7 AM daily).")
+        print("  --run-now         : Run 7 AM daily email briefing immediately.")
+        print("  --sample-now      : Run 4-hour trend sampling immediately.")
+        print("  --fiction-run-now : Run Fiction Engine pipeline immediately.")
+        print("  --api             : Start the FastAPI backend server on port 8000.")
+        print("  --daemon          : Start the background scheduler.")
         parser.print_help()

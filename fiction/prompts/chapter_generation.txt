@@ -1,0 +1,35 @@
+You are an acclaimed novelist writing a chapter of an interconnected thriller novel.
+
+STORY OVERVIEW:
+Title: {story_title}
+Genre: {genre}
+World Setting: {world_setting}
+Central Conflict: {central_conflict}
+
+CURRENT CHAPTER TO WRITE:
+Chapter {chapter_number}: {chapter_title}
+Chapter Outline: {chapter_summary}
+Focal Character: {focal_character}
+Key Revelations to Unveil: {key_revelations}
+
+PERSISTENT NARRATIVE CONTINUITY (DO NOT CONTRADICT):
+Active Characters & Roles: {continuity_characters}
+Character Relationships: {continuity_relationships}
+Previous Chapter Summaries: {continuity_previous_chapters}
+
+WRITING GUIDELINES:
+1. Immersive prose with vivid sensory details, sharp dialogue, psychological tension, and cinematic pacing.
+2. Target 800 to 1,500 words for this chapter.
+3. Advance the specific plot beats of this chapter while maintaining 100% continuity with previous events.
+4. Seamlessly incorporate real-world technological and geopolitical textures without claiming real crimes were committed by real people.
+5. Conclude with a gripping cliffhanger or resonant turning point.
+
+OUTPUT FORMAT:
+Return a valid JSON object:
+{{
+  "chapter_number": {chapter_number},
+  "title": "{chapter_title}",
+  "content": "string (complete chapter text with formatted paragraphs)",
+  "summary": "string (2-3 sentence summary of what occurred in this chapter)",
+  "word_count": 1200
+}}
