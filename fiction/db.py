@@ -5,6 +5,7 @@ Integrates directly with Neon PostgreSQL using database.py connection pooling.
 
 import os
 import json
+import uuid
 import logging
 from datetime import datetime, date
 from typing import List, Dict, Any, Optional
@@ -302,8 +303,33 @@ def get_event_relations(event_id: Optional[int] = None, limit: int = 200) -> Lis
 # =====================================================================
 
 @db_retry(max_retries=3, delay=1.0)
-def insert_cluster(cluster_code: str, name: str, theme: str, summary: str, domains: List[str], event_ids: List[int]) -> int:
-    """Inserts a multi-event narrative cluster."""
+def insert_cluster(
+    cluster_code: Any = None,
+    name: Optional[str] = None,
+    theme: Optional[str] = None,
+    summary: Optional[str] = None,
+    domains: Optional[List[str]] = None,
+    event_ids: Optional[List[int]] = None,
+    **kwargs
+) -> int:
+    """Inserts a multi-event narrative cluster. Supports dict record or explicit kwargs."""
+    if isinstance(cluster_code, dict):
+        d = cluster_code
+        cluster_code = d.get("cluster_code") or f"CLUSTER-{uuid.uuid4().hex[:8].upper()}"
+        name = d.get("name") or "Narrative Convergence"
+        theme = d.get("theme") or "Cross-Domain Narrative"
+        summary = d.get("summary") or ""
+        domains = d.get("domains") or ["General"]
+        event_ids = d.get("event_ids") or []
+
+    if not cluster_code:
+        cluster_code = f"CLUSTER-{uuid.uuid4().hex[:8].upper()}"
+    name = name or "Narrative Convergence"
+    theme = theme or "Cross-Domain Narrative"
+    summary = summary or ""
+    domains = domains or ["General"]
+    event_ids = event_ids or []
+
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("""

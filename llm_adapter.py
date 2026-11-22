@@ -80,8 +80,20 @@ class ResilientLLMClient:
                 }
             ), settings.OPENROUTER_MODEL
 
-    def generate(self, messages: List[Dict[str, str]], temperature: float = 0.3, max_tokens: int = 1500) -> str:
+    def generate(
+        self,
+        messages: Optional[List[Dict[str, str]]] = None,
+        prompt: Optional[str] = None,
+        temperature: float = 0.3,
+        max_tokens: int = 1500
+    ) -> str:
         """Executes completion with automatic fallback."""
+        if messages is None:
+            if prompt is not None:
+                messages = [{"role": "user", "content": prompt}]
+            else:
+                raise ValueError("Either messages or prompt must be provided to generate()")
+
         primary = self.primary_provider
         secondary = "groq" if primary == "openrouter" else "openrouter"
 
