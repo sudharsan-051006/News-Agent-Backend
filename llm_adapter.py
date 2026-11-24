@@ -20,7 +20,16 @@ def get_crewai_llm() -> LLM:
     """
     provider = settings.LLM_PROVIDER.lower()
 
-    if provider == "ollama":
+    if provider == "gemini":
+        model_name = settings.GEMINI_MODEL
+        if not model_name.startswith("gemini/"):
+            model_name = f"gemini/{model_name}"
+        logger.info(f"Using Google Gemini LLM for CrewAI: {model_name}")
+        return LLM(
+            model=model_name,
+            api_key=settings.GEMINI_API_KEY
+        )
+    elif provider == "ollama":
         model_name = settings.OLLAMA_MODEL
         if not model_name.startswith("ollama/"):
             model_name = f"ollama/{model_name}"
@@ -60,7 +69,12 @@ class ResilientLLMClient:
         self.primary_provider = settings.LLM_PROVIDER.lower()
 
     def get_client_and_model(self, provider: str):
-        if provider == "ollama":
+        if provider == "gemini":
+            return OpenAI(
+                base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+                api_key=settings.GEMINI_API_KEY
+            ), settings.GEMINI_MODEL
+        elif provider == "ollama":
             return OpenAI(
                 base_url=f"{settings.OLLAMA_BASE_URL}/v1",
                 api_key="ollama"
@@ -95,13 +109,20 @@ class ResilientLLMClient:
                 raise ValueError("Either messages or prompt must be provided to generate()")
 
         primary = self.primary_provider
-        secondary = "groq" if primary == "openrouter" else "openrouter"
+        if primary == "gemini":
+            providers = ["gemini", "groq", "openrouter"]
+        elif primary == "groq":
+            providers = ["groq", "gemini", "openrouter"]
+        elif primary == "ollama":
+            providers = ["ollama", "gemini", "groq"]
+        else:
+            providers = ["openrouter", "gemini", "groq"]
 
-        for prov in [primary, secondary]:
+        for prov in providers:
             try:
                 client, model = self.get_client_and_model(prov)
                 if not client.api_key:
-                    logger.warning(f"No API key provided for {prov}, skipping.")
+                    logger.debug(f"No API key provided for {prov}, skipping.")
                     continue
 
                 logger.info(f"Dispatching prompt to {prov} ({model})...")
@@ -116,7 +137,7 @@ class ResilientLLMClient:
                 logger.error(f"Error calling {prov}: {e}. Attempting fallback...")
                 continue
 
-        raise RuntimeError("Both primary and secondary LLM providers failed to complete the request.")
+        raise RuntimeError("All configured LLM providers failed to complete the request.")
 
 
 llm_client = ResilientLLMClient()

@@ -16,9 +16,13 @@ class Settings(BaseSettings):
         description="Neon DB PostgreSQL connection string with sslmode=require"
     )
 
-    # LLM Settings (OpenRouter, Groq, or Local Ollama)
-    LLM_PROVIDER: Literal["openrouter", "groq", "ollama"] = "openrouter"
+    # LLM Settings (Gemini, OpenRouter, Groq, or Local Ollama)
+    LLM_PROVIDER: Literal["gemini", "openrouter", "groq", "ollama"] = "gemini"
     
+    # Google Gemini Settings (High speed, massive context window)
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-1.5-flash"
+
     OPENROUTER_API_KEY: str = ""
     OPENROUTER_MODEL: str = "meta-llama/llama-3.3-70b-instruct:free"
     
