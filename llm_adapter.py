@@ -72,22 +72,30 @@ class ResilientLLMClient:
         if provider == "gemini":
             return OpenAI(
                 base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-                api_key=settings.GEMINI_API_KEY
+                api_key=settings.GEMINI_API_KEY,
+                max_retries=0,
+                timeout=8.0
             ), settings.GEMINI_MODEL
         elif provider == "ollama":
             return OpenAI(
                 base_url=f"{settings.OLLAMA_BASE_URL}/v1",
-                api_key="ollama"
+                api_key="ollama",
+                max_retries=0,
+                timeout=30.0
             ), settings.OLLAMA_MODEL
         elif provider == "groq":
             return OpenAI(
                 base_url="https://api.groq.com/openai/v1",
-                api_key=settings.GROQ_API_KEY
+                api_key=settings.GROQ_API_KEY,
+                max_retries=1,
+                timeout=15.0
             ), settings.GROQ_MODEL
         else:
             return OpenAI(
                 base_url="https://openrouter.ai/api/v1",
                 api_key=settings.OPENROUTER_API_KEY,
+                max_retries=1,
+                timeout=15.0,
                 default_headers={
                     "HTTP-Referer": "https://github.com/ai-trend-radar-agent",
                     "X-Title": "AI Trend Radar Agent"
