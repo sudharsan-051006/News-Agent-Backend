@@ -44,8 +44,9 @@ def get_eligible_articles(days: int = 7, min_words: int = 40, limit: int = 150) 
     Retrieves high-quality articles from Neon DB within the configured time window.
     Applies eligibility filter:
     - Excludes empty or near-empty content.
-    - Excludes articles already extracted if needed.
-    - Orders by published_at DESC.
+    - Excludes non-journalistic tutorial blogs (e.g. dev.to, hacker news).
+    - Orders strictly by published_at DESC (latest news first).
+    - Enforces publisher diversity (max 3 articles per publisher) so one feed cannot dominate.
     """
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -59,10 +60,22 @@ def get_eligible_articles(days: int = 7, min_words: int = 40, limit: int = 150) 
                 WHERE a.published_at >= NOW() - INTERVAL '%s days'
                   AND a.cleaned_content IS NOT NULL
                   AND LENGTH(TRIM(a.cleaned_content)) >= %s
+                  AND (f.name IS NULL OR LOWER(f.name) NOT IN ('dev.to', 'hacker news'))
                 ORDER BY a.published_at DESC
                 LIMIT %s;
-            """, (days, min_words * 5, limit))
-            return list(cur.fetchall())
+            """, (days, min_words * 5, limit * 2))
+            rows = list(cur.fetchall())
+
+            publisher_counts = {}
+            diversified = []
+            for r in rows:
+                pub = r.get("publisher") or "Unknown"
+                if publisher_counts.get(pub, 0) < 3:
+                    diversified.append(r)
+                    publisher_counts[pub] = publisher_counts.get(pub, 0) + 1
+                if len(diversified) >= limit:
+                    break
+            return diversified
 
 
 # =====================================================================

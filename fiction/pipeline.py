@@ -63,8 +63,21 @@ def run_fiction_pipeline(
         update_job_run(job_id, status="RUNNING", progress_pct=5, stage="DB_INIT")
         init_fiction_db()
 
-        # Step 1: Article Ingestion
+        # Step 1: Article Ingestion (Poll live RSS feeds + retrieve eligible articles)
         update_job_run(job_id, status="RUNNING", progress_pct=10, stage="FETCHING_ARTICLES")
+        try:
+            from database import get_active_feeds
+            from tools.rss_tools import fetch_and_clean_feed
+            active_feeds = get_active_feeds()
+            # Fast-poll top active news feeds so latest events are always captured
+            for feed in active_feeds[:10]:
+                try:
+                    fetch_and_clean_feed(feed["id"], feed["url"])
+                except Exception as feed_err:
+                    logger.debug(f"Feed poll notice for {feed.get('name')}: {feed_err}")
+        except Exception as ingest_err:
+            logger.warning(f"Live RSS ingestion skipped: {ingest_err}")
+
         articles = get_eligible_articles(days=days, min_words=30, limit=100)
         logger.info(f"Retrieved {len(articles)} eligible articles for fiction extraction.")
         summary["articles_processed"] = len(articles)
@@ -72,7 +85,7 @@ def run_fiction_pipeline(
         # Step 2: Event Extraction
         update_job_run(job_id, status="RUNNING", progress_pct=25, stage="EXTRACTING_EVENTS")
         if articles:
-            ext_result = batch_extract_events(articles[:25])  # Process top 25 high-information articles
+            ext_result = batch_extract_events(articles[:12])  # Process top 12 diversified high-priority news articles
             summary["events_created"] = ext_result.get("events_created", 0)
 
         # Step 3: Relationship Discovery

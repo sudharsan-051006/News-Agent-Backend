@@ -55,14 +55,41 @@ app.add_middleware(
 )
 
 
+api_scheduler = None
+
 @app.on_event("startup")
 def on_startup():
-    """Initializes schemas on API startup."""
+    """Initializes schemas on API startup and launches background RSS polling."""
+    global api_scheduler
     try:
         init_fiction_db()
         logger.info("Fiction Engine database initialized.")
     except Exception as exc:
         logger.warning(f"DB startup check notice: {exc}")
+
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+        from main import job_sample_and_update_trends
+        api_scheduler = BackgroundScheduler()
+        # Periodically sample active RSS feeds every 2 hours while API is running
+        api_scheduler.add_job(
+            job_sample_and_update_trends,
+            'interval',
+            hours=2,
+            id='api_background_rss_job'
+        )
+        api_scheduler.start()
+        logger.info("Background RSS sampling scheduler started (interval: 2 hours).")
+    except Exception as exc:
+        logger.warning(f"Background scheduler notice: {exc}")
+
+
+@app.on_event("shutdown")
+def on_shutdown():
+    global api_scheduler
+    if api_scheduler and api_scheduler.running:
+        api_scheduler.shutdown()
+        logger.info("Background RSS scheduler stopped.")
 
 
 # =====================================================================
@@ -108,6 +135,16 @@ def get_trends(limit: int = Query(60, ge=1, le=100)):
             """, (limit,))
             rows = list(cur.fetchall())
             return {"count": len(rows), "trends": rows}
+
+
+@app.post("/api/trends/refresh")
+def refresh_trends(background_tasks: BackgroundTasks):
+    """
+    Triggers immediate on-demand ingestion of active RSS feeds and recalculates topic trends.
+    """
+    from main import job_sample_and_update_trends
+    background_tasks.add_task(job_sample_and_update_trends)
+    return {"status": "started", "message": "Live RSS feed polling and trend update initiated in background."}
 
 
 # =====================================================================
