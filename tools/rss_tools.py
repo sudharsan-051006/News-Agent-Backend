@@ -6,6 +6,7 @@ Uses feedparser with ETag/Last-Modified support and Trafilatura for clean text e
 import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+import dateutil.parser
 import feedparser
 import httpx
 import trafilatura
@@ -19,6 +20,24 @@ BROWSER_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
 }
+
+
+def _extract_entry_published(entry) -> datetime:
+    parsed = getattr(entry, "published_parsed", None) or getattr(entry, "updated_parsed", None) or getattr(entry, "created_parsed", None)
+    if parsed:
+        try:
+            return datetime(*parsed[:6])
+        except Exception:
+            pass
+    for attr in ("published", "pubDate", "date", "updated", "created", "dc:date"):
+        val = getattr(entry, attr, None) or (entry.get(attr) if isinstance(entry, dict) else None)
+        if val and isinstance(val, str):
+            try:
+                dt = dateutil.parser.parse(val)
+                return dt.replace(tzinfo=None)
+            except Exception:
+                pass
+    return datetime.utcnow()
 
 
 def fetch_and_clean_feed(feed_id: int, feed_url: str) -> List[Dict[str, Any]]:
@@ -37,7 +56,6 @@ def fetch_and_clean_feed(feed_id: int, feed_url: str) -> List[Dict[str, Any]]:
         guid = getattr(entry, "id", getattr(entry, "link", None))
         title = getattr(entry, "title", "No Title")
         link = getattr(entry, "link", "")
-        published_parsed = getattr(entry, "published_parsed", None)
 
         if not guid or not link:
             continue
@@ -46,7 +64,7 @@ def fetch_and_clean_feed(feed_id: int, feed_url: str) -> List[Dict[str, Any]]:
         if guid in existing_guids:
             continue
 
-        published_at = datetime(*published_parsed[:6]) if published_parsed else datetime.utcnow()
+        published_at = _extract_entry_published(entry)
 
         # Step 1: Extract full content & OpenGraph image via custom HTTP fetch + Trafilatura + BeautifulSoup
         cleaned_text = ""
