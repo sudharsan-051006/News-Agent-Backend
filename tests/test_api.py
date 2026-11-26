@@ -1,5 +1,5 @@
 """
-API Endpoint Integration Tests for Elinity Platform & Fiction Engine.
+API Endpoint Integration Tests for Elinity News Trend Radar Agent.
 """
 
 import os
@@ -28,24 +28,6 @@ class TestElinityAPI(unittest.TestCase):
         data = response.json()
         self.assertIn("trends", data)
         self.assertIn("count", data)
-
-    def test_fiction_events_endpoint(self):
-        response = self.client.get("/api/fiction/events?limit=5")
-        self.assertEqual(response.status_code, 200)
-        data = response.json()
-        self.assertIn("events", data)
-
-    def test_fiction_clusters_endpoint(self):
-        response = self.client.get("/api/fiction/clusters?limit=5")
-        self.assertEqual(response.status_code, 200)
-        data = response.json()
-        self.assertIn("clusters", data)
-
-    def test_fiction_stories_endpoint(self):
-        response = self.client.get("/api/fiction/stories?limit=5")
-        self.assertEqual(response.status_code, 200)
-        data = response.json()
-        self.assertIn("stories", data)
 
 
 if __name__ == "__main__":
