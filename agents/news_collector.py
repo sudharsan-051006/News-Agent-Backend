@@ -4,6 +4,7 @@ import time
 from html import unescape
 from urllib.parse import urljoin, urlparse
 
+import dateutil.parser
 import feedparser
 import requests
 from bs4 import BeautifulSoup
@@ -437,6 +438,14 @@ def _entry_timestamp(entry):
             return float(calendar.timegm(published))
         except (TypeError, ValueError, OverflowError):
             pass
+    for attr in ("published", "pubDate", "date", "updated", "created"):
+        val = entry.get(attr)
+        if val and isinstance(val, str):
+            try:
+                dt = dateutil.parser.parse(val)
+                return float(dt.timestamp())
+            except Exception:
+                pass
     return 0.0
 
 
