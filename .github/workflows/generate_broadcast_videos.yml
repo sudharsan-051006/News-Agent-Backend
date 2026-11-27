@@ -38,6 +38,10 @@ on:
           - 'model'
           - 'sarvam'
 
+concurrency:
+  group: news-backend-pipeline
+  cancel-in-progress: false
+
 jobs:
   render-broadcast-videos:
     runs-on: ubuntu-latest

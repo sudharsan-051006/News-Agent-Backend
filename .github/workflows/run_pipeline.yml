@@ -7,6 +7,10 @@ on:
 
   workflow_dispatch:        # Manual trigger
 
+concurrency:
+  group: news-backend-pipeline
+  cancel-in-progress: false
+
 jobs:
   run-pipeline:
     runs-on: ubuntu-latest
