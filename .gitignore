@@ -1,3 +1,10 @@
-*.env
-*\venv
-*\__pycache__
+.env
+.env.*
+.venv/
+venv/
+__pycache__/
+*.pyc
+outputs/
+credentials.json
+token.json
+ollama.log

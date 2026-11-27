@@ -1,0 +1,118 @@
+name: Generate AI News Broadcast Videos
+
+on:
+  schedule:
+    # Three scheduled daily broadcasts in India Standard Time (IST):
+    # 08:00 AM IST = 02:30 AM UTC
+    - cron: '30 2 * * *'
+    # 01:00 PM IST = 07:30 AM UTC
+    - cron: '30 7 * * *'
+    # 06:00 PM IST = 12:30 PM UTC
+    - cron: '30 12 * * *'
+
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Broadcast mode to generate'
+        required: true
+        type: choice
+        default: 'both'
+        options:
+          - 'both'
+          - 'top25'
+          - 'trending'
+      top25_count:
+        description: 'Number of headlines for Top 25 Bulletin'
+        required: false
+        default: '25'
+      trending_count:
+        description: 'Number of headlines for Trending Bulletin'
+        required: false
+        default: '10'
+      audio_engine:
+        description: 'Audio speech synthesis engine'
+        required: true
+        type: choice
+        default: 'model'
+        options:
+          - 'model'
+          - 'sarvam'
+
+jobs:
+  render-broadcast-videos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install System Libraries & Fonts (FFmpeg, TrueType Fonts)
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y ffmpeg fonts-liberation fonts-dejavu fonts-freefont-ttf
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install & Start Ollama Background Daemon
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          ollama serve > ollama.log 2>&1 &
+          until curl -s http://localhost:11434/api/tags > /dev/null; do
+            echo "Waiting for Ollama to initialize..."
+            sleep 2
+          done
+          echo "Pulling lightweight CPU-optimized LLM model (llama3.2:3b)..."
+          ollama pull llama3.2:3b
+          echo "Pulling mistral:latest for broadcast scriptwriter..."
+          ollama pull mistral || true
+          echo "Ollama is ready."
+
+      - name: Generate Top 25 News Bulletin Video
+        if: ${{ github.event.inputs.mode == 'both' || github.event.inputs.mode == 'top25' || github.event_name == 'schedule' }}
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://atonkzxonfemlctmtdvo.supabase.co' }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF0b25renhvbmZlbWxjdG10ZHZvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2OTkzMTc2OSwiZXhwIjoyMDg1NTA3NzY5fQ.a903mZUoLRxd9A6FajoK0wz7RBI4KyU8Zknl5Yo1Azc' }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF0b25renhvbmZlbWxjdG10ZHZvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2OTkzMTc2OSwiZXhwIjoyMDg1NTA3NzY5fQ.a903mZUoLRxd9A6FajoK0wz7RBI4KyU8Zknl5Yo1Azc' }}
+          GDRIVE_APPS_SCRIPT_URL: ${{ secrets.GDRIVE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbyFIi4LIJBb6LIDBK5UIoXczydXfYQ1lXGjdi4AN-AG_rnsrj945lLXGAV-XDvsJ6-uXw/exec' }}
+          GDRIVE_FOLDER_ID: 'https://drive.google.com/drive/folders/1jFFXoO2sqdDh3lpTcu40lRFTJmygIRRU?usp=sharing'
+          OLLAMA_MODEL: 'llama3.2:3b'
+        run: |
+          python generate_headlines_video_pipeline.py \
+            --mode top25 \
+            --count ${{ github.event.inputs.top25_count || '25' }} \
+            --audio-engine ${{ github.event.inputs.audio_engine || 'model' }}
+
+      - name: Generate Trending Stories Bulletin Video
+        if: ${{ github.event.inputs.mode == 'both' || github.event.inputs.mode == 'trending' || github.event_name == 'schedule' }}
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://atonkzxonfemlctmtdvo.supabase.co' }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF0b25renhvbmZlbWxjdG10ZHZvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2OTkzMTc2OSwiZXhwIjoyMDg1NTA3NzY5fQ.a903mZUoLRxd9A6FajoK0wz7RBI4KyU8Zknl5Yo1Azc' }}
+          NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || 'postgresql://neondb_owner:npg_cyTeq54HFhNf@ep-royal-sunset-beh3tgos-pooler.c-9.us-east-2.aws.neon.tech/neondb?sslmode=require' }}
+          GDRIVE_APPS_SCRIPT_URL: ${{ secrets.GDRIVE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbyFIi4LIJBb6LIDBK5UIoXczydXfYQ1lXGjdi4AN-AG_rnsrj945lLXGAV-XDvsJ6-uXw/exec' }}
+          GDRIVE_FOLDER_ID: 'https://drive.google.com/drive/folders/1jFFXoO2sqdDh3lpTcu40lRFTJmygIRRU?usp=sharing'
+          OLLAMA_MODEL: 'llama3.2:3b'
+        run: |
+          python generate_headlines_video_pipeline.py \
+            --mode trending \
+            --count ${{ github.event.inputs.trending_count || '10' }} \
+            --audio-engine ${{ github.event.inputs.audio_engine || 'model' }}
+
+      - name: Archive Generated Video Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: news-broadcast-videos-${{ github.run_id }}
+          path: |
+            outputs/*.mp4
+            outputs/*.json
+            outputs/*.vtt
+          retention-days: 7
