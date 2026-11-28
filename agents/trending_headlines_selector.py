@@ -24,10 +24,7 @@ from agents.image_quality_filter import fetch_and_validate_image
 from agents.top_headlines_selector import _clean_headline
 from agents.news_video_generator import resolve_actual_publisher
 
-NEON_DATABASE_URL = os.getenv(
-    "NEON_DATABASE_URL",
-    "postgresql://neondb_owner:npg_cyTeq54HFhNf@ep-royal-sunset-beh3tgos-pooler.c-9.us-east-2.aws.neon.tech/neondb?sslmode=require"
-)
+NEON_DATABASE_URL = os.getenv("NEON_DATABASE_URL") or os.getenv("DATABASE_URL")
 
 
 def get_trending_headlines(
@@ -41,6 +38,10 @@ def get_trending_headlines(
     """
     print(f"📡 Querying Neon database for top trending topics (target: {target_count})...")
     raw_topics = []
+
+    if not NEON_DATABASE_URL:
+        print("⚠️ Neon database URL is not configured (NEON_DATABASE_URL or DATABASE_URL).")
+        return []
 
     try:
         import psycopg2

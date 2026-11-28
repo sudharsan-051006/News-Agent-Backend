@@ -43,7 +43,7 @@ jobs:
       - name: Install & Start Ollama (Zero API Keys)
         run: |
           curl -fsSL https://ollama.com/install.sh | sh
-          ollama serve > ollama.log 2>&1 &
+          OLLAMA_NUM_PARALLEL=$(nproc) OLLAMA_MAX_LOADED_MODELS=2 OLLAMA_FLASH_ATTENTION=1 ollama serve > ollama.log 2>&1 &
           until curl -s http://localhost:11434/api/tags > /dev/null; do
             echo "Waiting for Ollama daemon to initialize..."
             sleep 2

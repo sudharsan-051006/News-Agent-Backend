@@ -497,6 +497,7 @@ def generate_headlines_video(
     ff = imageio_ffmpeg.get_ffmpeg_exe()
     cmd_audio = [
         ff, "-y",
+        "-threads", "0",
         "-f", "concat",
         "-safe", "0",
         "-i", concat_audio_list,
@@ -627,6 +628,7 @@ def generate_headlines_video(
     print("📦 Muxing video and audio with faststart for web streaming...")
     cmd_mux = [
         ff, "-y",
+        "-threads", "0",
         "-i", temp_video,
         "-i", temp_master_audio,
         "-c:v", "libx264",

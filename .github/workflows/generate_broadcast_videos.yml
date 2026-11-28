@@ -57,6 +57,17 @@ jobs:
           python-version: '3.10'
           cache: 'pip'
 
+      - name: Optimize Runner Multithreading Environment
+        run: |
+          CORES=$(nproc)
+          echo "CORES=$CORES" >> $GITHUB_ENV
+          echo "OMP_NUM_THREADS=$CORES" >> $GITHUB_ENV
+          echo "OPENBLAS_NUM_THREADS=$CORES" >> $GITHUB_ENV
+          echo "MKL_NUM_THREADS=$CORES" >> $GITHUB_ENV
+          echo "NUMEXPR_NUM_THREADS=$CORES" >> $GITHUB_ENV
+          echo "PYTHONUNBUFFERED=1" >> $GITHUB_ENV
+          echo "Configured runner environment with all $CORES CPU cores."
+
       - name: Install System Libraries & Fonts (FFmpeg, TrueType Fonts)
         run: |
           sudo apt-get update -y
@@ -70,7 +81,7 @@ jobs:
       - name: Install & Start Ollama Background Daemon
         run: |
           curl -fsSL https://ollama.com/install.sh | sh
-          ollama serve > ollama.log 2>&1 &
+          OLLAMA_NUM_PARALLEL=$CORES OLLAMA_MAX_LOADED_MODELS=2 OLLAMA_FLASH_ATTENTION=1 ollama serve > ollama.log 2>&1 &
           until curl -s http://localhost:11434/api/tags > /dev/null; do
             echo "Waiting for Ollama to initialize..."
             sleep 2
@@ -86,7 +97,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || secrets.SUPABASE_KEY }}
           GDRIVE_APPS_SCRIPT_URL: ${{ secrets.GDRIVE_APPS_SCRIPT_URL }}
           GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
           OLLAMA_MODEL: 'llama3.2:3b'
@@ -102,7 +113,9 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || secrets.SUPABASE_KEY }}
+          NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || secrets.DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL || secrets.NEON_DATABASE_URL }}
           GDRIVE_APPS_SCRIPT_URL: ${{ secrets.GDRIVE_APPS_SCRIPT_URL }}
           GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
           OLLAMA_MODEL: 'llama3.2:3b'

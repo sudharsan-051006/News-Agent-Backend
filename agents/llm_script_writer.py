@@ -9,10 +9,12 @@ from __future__ import annotations
 import os
 import re
 import time
+import concurrent.futures
 from typing import Any, Dict, List, Optional
 import ollama
 
 DEFAULT_OLLAMA_MODEL = "mistral:latest"
+NUM_CORES = os.cpu_count() or 4
 
 
 def generate_broadcast_intro(
@@ -37,7 +39,7 @@ def generate_broadcast_intro(
                 {"role": "system", "content": "You are a professional TV news broadcast anchor. Write spoken audio narration."},
                 {"role": "user", "content": prompt},
             ],
-            options={"temperature": 0.4},
+            options={"temperature": 0.4, "num_thread": NUM_CORES},
         )
         text = res["message"]["content"].strip().strip('"\'')
         if text and len(text) > 20:
@@ -72,7 +74,7 @@ def generate_broadcast_outro(
                 {"role": "system", "content": "You are a professional TV news broadcast anchor. Write spoken audio narration."},
                 {"role": "user", "content": prompt},
             ],
-            options={"temperature": 0.4},
+            options={"temperature": 0.4, "num_thread": NUM_CORES},
         )
         text = res["message"]["content"].strip().strip('"\'')
         if text and len(text) > 20:
@@ -119,7 +121,7 @@ def rewrite_story_for_broadcast(
                 },
                 {"role": "user", "content": prompt},
             ],
-            options={"temperature": 0.3},
+            options={"temperature": 0.3, "num_thread": NUM_CORES},
         )
         spoken = res["message"]["content"].strip().strip('"\'')
         spoken = re.sub(r'[\r\n]+', ' ', spoken).strip()
@@ -142,12 +144,13 @@ def batch_generate_scripts_with_llm(
     headlines: List[Dict[str, Any]],
     model: str = DEFAULT_OLLAMA_MODEL,
 ) -> List[Dict[str, Any]]:
-    """Batch-generate dynamic broadcast narration scripts for all headlines using Ollama."""
-    print(f"\n🧠 Generating dynamic news anchor narration scripts via LLM ({model})...")
+    """Batch-generate dynamic broadcast narration scripts in parallel utilizing all CPU cores."""
+    print(f"\n🧠 Generating dynamic news anchor narration scripts via LLM ({model}, {NUM_CORES} cores)...")
     t0 = time.time()
     total = len(headlines)
 
-    for i, item in enumerate(headlines, start=1):
+    def _process_one(idx_item):
+        i, item = idx_item
         headline = item.get("headline") or item.get("original_title") or ""
         summary = item.get("ai_summary") or item.get("summary") or ""
         cat = item.get("category", "General")
@@ -161,6 +164,13 @@ def batch_generate_scripts_with_llm(
             model=model,
         )
         item["narration_script"] = script
+        return i, headline, script
+
+    workers = min(4, NUM_CORES)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+        results = list(pool.map(_process_one, enumerate(headlines, start=1)))
+
+    for i, headline, script in sorted(results, key=lambda x: x[0]):
         print(f"  [{i:02d}/{total:02d}] {headline[:45]}...")
         print(f"        🎙️ Anchor: \"{script}\"")
 

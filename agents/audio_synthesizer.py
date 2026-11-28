@@ -179,12 +179,15 @@ def batch_synthesize_headlines(
     use_sarvam: bool = False,
     offline_voice: str = DEFAULT_OFFLINE_VOICE,
 ) -> List[Dict[str, Any]]:
-    """Synthesize audio for each headline in the list and annotate with audio path and duration."""
+    """Synthesize audio for each headline in parallel utilizing multiple CPU workers."""
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"\n🎧 Synthesizing audio for {len(headlines)} headlines via Neural Model...")
-    for idx, item in enumerate(headlines, start=1):
+    print(f"\n🎧 Synthesizing audio for {len(headlines)} headlines in parallel...")
+    import concurrent.futures
+
+    def _synth_one(idx_item):
+        idx, item = idx_item
         text = item.get("narration_script") or item.get("headline") or "News update"
         audio_file = str(out_dir / f"headline_{idx:02d}.mp3")
         engine, duration = synthesize_speech(
@@ -197,7 +200,14 @@ def batch_synthesize_headlines(
         item["audio_path"] = audio_file
         item["audio_engine"] = engine
         item["audio_duration"] = duration
-        print(f"  [{idx:02d}/{len(headlines):02d}] {duration:.1f}s via {engine} | {item['headline'][:45]}...")
+        return idx, duration, engine, item["headline"]
+
+    num_workers = min(6, os.cpu_count() or 4)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=num_workers) as pool:
+        results = list(pool.map(_synth_one, enumerate(headlines, start=1)))
+
+    for idx, duration, engine, h_title in sorted(results, key=lambda x: x[0]):
+        print(f"  [{idx:02d}/{len(headlines):02d}] {duration:.1f}s via {engine} | {h_title[:45]}...")
 
     total_time = sum(h.get("audio_duration", 0) for h in headlines)
     print(f"✅ Audio synthesis complete. Total bulletin duration: {total_time:.1f}s ({total_time/60:.1f} min)")
