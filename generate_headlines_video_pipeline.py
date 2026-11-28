@@ -217,13 +217,21 @@ def run_pipeline(
     timeline_cdn_url = None
     drive_url = None
 
-    dest_filename = "trending_headlines_latest.mp4" if is_trending_mode else "top25_headlines_latest.mp4"
-    timeline_dest = "trending_timeline.json" if is_trending_mode else "headlines_timeline.json"
+    # Format human-readable date and time for video naming (IST)
+    ist = timezone(timedelta(hours=5, minutes=30))
+    now_ist = datetime.now(ist)
+    date_stamp = now_ist.strftime("%Y-%m-%d")
+    time_stamp = now_ist.strftime("%I-%M%p")
 
-    # Step 1: Attempt Google Drive upload first (preserves Supabase bucket storage quota)
+    bulletin_prefix = "trending_headlines" if is_trending_mode else "top25_headlines"
+    dest_filename = f"{bulletin_prefix}_{date_stamp}_{time_stamp}.mp4"
+    timeline_dest = f"{bulletin_prefix}_{date_stamp}_{time_stamp}_timeline.json"
+    latest_filename = f"{bulletin_prefix}_latest.mp4"
+
+    # Step 1: Attempt Google Drive upload first (named with date and time)
     drive_upload_success = False
     if drive_folder:
-        print(f"📁 [Storage] Primary Destination: Google Drive (GAS direct stream)...")
+        print(f"📁 [Storage] Primary Destination: Google Drive ({dest_filename})...")
         success, drive_url_or_msg = upload_to_google_drive(
             video_file, 
             folder_id_or_link=drive_folder, 
@@ -242,7 +250,7 @@ def run_pipeline(
     should_upload_supabase = (not drive_upload_success) or upload_supabase
     if should_upload_supabase:
         fallback_label = "fallback" if not drive_upload_success and drive_folder else "requested"
-        print(f"📦 [Storage] Uploading to Supabase Storage ({fallback_label} destination)...")
+        print(f"📦 [Storage] Uploading to Supabase Storage ({fallback_label} destination: {dest_filename})...")
         success, url_or_err = upload_to_supabase_storage(video_file, destination_name=dest_filename)
         if success:
             supabase_url = url_or_err
