@@ -14,6 +14,10 @@ on:
         required: true
         default: 'Trend'
 
+concurrency:
+  group: news-backend-pipeline
+  cancel-in-progress: false
+
 jobs:
   sample-trends:
     runs-on: ubuntu-latest
@@ -54,8 +58,8 @@ jobs:
           LLM_PROVIDER: "ollama"
           OLLAMA_MODEL: "llama3.2:3b"
           OLLAMA_BASE_URL: "http://localhost:11434"
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://atonkzxonfemlctmtdvo.supabase.co' }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF0b25renhvbmZlbWxjdG10ZHZvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2OTkzMTc2OSwiZXhwIjoyMDg1NTA3NzY5fQ.a903mZUoLRxd9A6FajoK0wz7RBI4KyU8Zknl5Yo1Azc' }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
           MIN_TREND_VELOCITY_SCORE: "3.0"
           HF_HUB_DISABLE_SYMLINKS_WARNING: "1"
           TOKENIZERS_PARALLELISM: "false"
