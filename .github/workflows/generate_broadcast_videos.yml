@@ -84,11 +84,11 @@ jobs:
       - name: Generate Top 25 News Bulletin Video
         if: ${{ github.event.inputs.mode == 'both' || github.event.inputs.mode == 'top25' || github.event_name == 'schedule' }}
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://atonkzxonfemlctmtdvo.supabase.co' }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF0b25renhvbmZlbWxjdG10ZHZvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2OTkzMTc2OSwiZXhwIjoyMDg1NTA3NzY5fQ.a903mZUoLRxd9A6FajoK0wz7RBI4KyU8Zknl5Yo1Azc' }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF0b25renhvbmZlbWxjdG10ZHZvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2OTkzMTc2OSwiZXhwIjoyMDg1NTA3NzY5fQ.a903mZUoLRxd9A6FajoK0wz7RBI4KyU8Zknl5Yo1Azc' }}
-          GDRIVE_APPS_SCRIPT_URL: ${{ secrets.GDRIVE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbyFIi4LIJBb6LIDBK5UIoXczydXfYQ1lXGjdi4AN-AG_rnsrj945lLXGAV-XDvsJ6-uXw/exec' }}
-          GDRIVE_FOLDER_ID: 'https://drive.google.com/drive/folders/1jFFXoO2sqdDh3lpTcu40lRFTJmygIRRU?usp=sharing'
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GDRIVE_APPS_SCRIPT_URL: ${{ secrets.GDRIVE_APPS_SCRIPT_URL }}
+          GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
           OLLAMA_MODEL: 'llama3.2:3b'
         run: |
           python generate_headlines_video_pipeline.py \
@@ -100,11 +100,11 @@ jobs:
       - name: Generate Trending Stories Bulletin Video
         if: ${{ github.event.inputs.mode == 'both' || github.event.inputs.mode == 'trending' || github.event_name == 'schedule' }}
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://atonkzxonfemlctmtdvo.supabase.co' }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF0b25renhvbmZlbWxjdG10ZHZvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2OTkzMTc2OSwiZXhwIjoyMDg1NTA3NzY5fQ.a903mZUoLRxd9A6FajoK0wz7RBI4KyU8Zknl5Yo1Azc' }}
-          NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL || 'postgresql://neondb_owner:npg_cyTeq54HFhNf@ep-royal-sunset-beh3tgos-pooler.c-9.us-east-2.aws.neon.tech/neondb?sslmode=require' }}
-          GDRIVE_APPS_SCRIPT_URL: ${{ secrets.GDRIVE_APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbyFIi4LIJBb6LIDBK5UIoXczydXfYQ1lXGjdi4AN-AG_rnsrj945lLXGAV-XDvsJ6-uXw/exec' }}
-          GDRIVE_FOLDER_ID: 'https://drive.google.com/drive/folders/1jFFXoO2sqdDh3lpTcu40lRFTJmygIRRU?usp=sharing'
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          GDRIVE_APPS_SCRIPT_URL: ${{ secrets.GDRIVE_APPS_SCRIPT_URL }}
+          GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
           OLLAMA_MODEL: 'llama3.2:3b'
         run: |
           python generate_headlines_video_pipeline.py \
