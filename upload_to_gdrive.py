@@ -35,14 +35,16 @@ def main():
     print(f"🎬 Target Video: {target_video} ({os.path.getsize(target_video)/(1024*1024):.2f} MB)")
     print(f"📁 Target Google Drive: {folder_id}")
 
-    supabase_base = "https://atonkzxonfemlctmtdvo.supabase.co/storage/v1/object/public/news_videos"
     dest_name = "trending_headlines_latest.mp4" if "trending" in Path(target_video).name.lower() else "top25_headlines_latest.mp4"
-    supabase_url = f"{supabase_base}/{dest_name}"
 
-    success, link_or_msg = upload_to_google_drive(target_video, folder_id_or_link=folder_id, supabase_url=supabase_url)
+    success, link_or_msg = upload_to_google_drive(
+        target_video, 
+        folder_id_or_link=folder_id, 
+        destination_name=dest_name
+    )
     if success:
-        print(f"\n🎉 Successfully uploaded to Google Drive!")
-        print(f"🔗 File Link: {link_or_msg}")
+        print(f"\n🎉 Successfully uploaded directly to Google Drive via GAS!")
+        print(f"🔗 Folder Link: {link_or_msg}")
     else:
         print(f"\n❌ Upload could not complete:")
         print(link_or_msg)

@@ -94,7 +94,8 @@ jobs:
           python generate_headlines_video_pipeline.py \
             --mode top25 \
             --count ${{ github.event.inputs.top25_count || '25' }} \
-            --audio-engine ${{ github.event.inputs.audio_engine || 'model' }}
+            --audio-engine ${{ github.event.inputs.audio_engine || 'model' }} \
+            --no-supabase
 
       - name: Generate Trending Stories Bulletin Video
         if: ${{ github.event.inputs.mode == 'both' || github.event.inputs.mode == 'trending' || github.event_name == 'schedule' }}
@@ -109,7 +110,8 @@ jobs:
           python generate_headlines_video_pipeline.py \
             --mode trending \
             --count ${{ github.event.inputs.trending_count || '10' }} \
-            --audio-engine ${{ github.event.inputs.audio_engine || 'model' }}
+            --audio-engine ${{ github.event.inputs.audio_engine || 'model' }} \
+            --no-supabase
 
       - name: Archive Generated Video Artifacts
         uses: actions/upload-artifact@v4

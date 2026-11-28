@@ -124,13 +124,12 @@ def upload_to_google_drive(
     local_file_path: str,
     folder_id_or_link: Optional[str] = None,
     credentials_path: Optional[str] = None,
+    destination_name: Optional[str] = None,
     supabase_url: Optional[str] = None,
 ) -> Tuple[bool, str]:
-    """Upload video to Google Drive.
+    """Upload video directly to Google Drive via Google Apps Script (GAS) or Drive API.
 
-    Supports:
-    1. Google Apps Script Web App webhook (zero credentials needed).
-    2. Direct folder ID or shareable Google Drive URL via Service Account or OAuth credentials file (credentials.json).
+    Completely bypasses Supabase Storage to prevent exhausting database/bucket quotas.
     """
     path = Path(local_file_path)
     if not path.exists():
@@ -146,25 +145,40 @@ def upload_to_google_drive(
         elif "id=" in folder_id:
             folder_id = folder_id.split("id=")[1].split("&")[0].strip()
 
-    # Method 1: Check for Google Apps Script Webhook
+    dest_filename = destination_name or path.name
+    file_size_mb = path.stat().st_size / (1024 * 1024)
+
+    # Method 1: Direct Google Apps Script (GAS) Upload (Zero credentials, zero Supabase)
     apps_script_url = os.getenv("GDRIVE_APPS_SCRIPT_URL", "").strip()
-    if apps_script_url and supabase_url:
+    if apps_script_url:
         try:
-            print(f"🚀 [Google Drive] Triggering Google Apps Script Webhook to save video to Drive...")
+            print(f"🚀 [Google Drive] Direct upload via Google Apps Script ({file_size_mb:.2f} MB) -> {dest_filename}...")
+            import base64
             import requests
+
+            with open(local_file_path, "rb") as f:
+                b64_data = base64.b64encode(f.read()).decode("utf-8")
+
             payload = {
-                "video_url": supabase_url,
-                "filename": path.name,
+                "action": "upload_direct",
+                "filename": dest_filename,
                 "folder_id": folder_id,
+                "file_base64": b64_data,
+                "video_url": supabase_url or "",
             }
-            res = requests.post(apps_script_url, json=payload, timeout=60, allow_redirects=True)
+
+            headers = {"Content-Type": "application/json"}
+            res = requests.post(apps_script_url, json=payload, headers=headers, timeout=180, allow_redirects=True)
+
             if res.status_code == 200 and "accounts.google.com" not in res.text:
-                print(f"✅ Google Apps Script successfully saved video to Drive folder!")
+                print(f"✅ Successfully uploaded {dest_filename} ({file_size_mb:.2f} MB) directly to Google Drive via GAS!")
                 return True, target_folder
             elif "accounts.google.com" in res.text or res.status_code == 401:
                 print("ℹ️ [Google Apps Script] Web app needs 'Who has access' set to 'Anyone' in deployment settings.")
+            else:
+                print(f"⚠️ [Google Apps Script] Response ({res.status_code}): {res.text[:250]}")
         except Exception as e:
-            print(f"⚠️ Google Apps Script trigger error: {e}")
+            print(f"⚠️ Google Apps Script direct upload error: {e}")
 
     # Check for credentials
     cred_file = credentials_path or os.getenv("GDRIVE_CREDENTIALS_FILE", "credentials.json")

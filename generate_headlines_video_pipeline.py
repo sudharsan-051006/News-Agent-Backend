@@ -217,12 +217,38 @@ def run_pipeline(
     timeline_cdn_url = None
     drive_url = None
 
-    if upload_supabase:
-        dest_filename = "trending_headlines_latest.mp4" if is_trending_mode else "top25_headlines_latest.mp4"
-        timeline_dest = "trending_timeline.json" if is_trending_mode else "headlines_timeline.json"
+    dest_filename = "trending_headlines_latest.mp4" if is_trending_mode else "top25_headlines_latest.mp4"
+    timeline_dest = "trending_timeline.json" if is_trending_mode else "headlines_timeline.json"
+
+    # Step 1: Attempt Google Drive upload first (preserves Supabase bucket storage quota)
+    drive_upload_success = False
+    if drive_folder:
+        print(f"📁 [Storage] Primary Destination: Google Drive (GAS direct stream)...")
+        success, drive_url_or_msg = upload_to_google_drive(
+            video_file, 
+            folder_id_or_link=drive_folder, 
+            destination_name=dest_filename, 
+            supabase_url=None
+        )
+        if success:
+            drive_upload_success = True
+            drive_url = drive_url_or_msg
+            print(f"✅ Video safely saved to Google Drive: {dest_filename}")
+        else:
+            print(f"⚠️ Google Drive upload failed or timed out: {drive_url_or_msg}")
+            print(f"🔄 Automatic Fallback: Uploading video to Supabase Storage...")
+
+    # Step 2: Upload to Supabase Storage ONLY if Google Drive failed, or if explicitly forced
+    should_upload_supabase = (not drive_upload_success) or upload_supabase
+    if should_upload_supabase:
+        fallback_label = "fallback" if not drive_upload_success and drive_folder else "requested"
+        print(f"📦 [Storage] Uploading to Supabase Storage ({fallback_label} destination)...")
         success, url_or_err = upload_to_supabase_storage(video_file, destination_name=dest_filename)
         if success:
             supabase_url = url_or_err
+            print(f"✅ Stored in Supabase: {supabase_url}")
+        else:
+            print(f"❌ Supabase Storage upload failed: {url_or_err}")
 
         # Also upload clickable timeline JSON to Supabase Storage for news_web
         if os.path.exists(timeline_json):
@@ -231,13 +257,6 @@ def run_pipeline(
             )
             if success_json:
                 timeline_cdn_url = json_url_or_err
-
-    if drive_folder:
-        success, drive_url_or_msg = upload_to_google_drive(video_file, folder_id_or_link=drive_folder, supabase_url=supabase_url)
-        if success:
-            drive_url = drive_url_or_msg
-        else:
-            drive_url = drive_folder  # Keep shareable link
 
     # Record metadata in Supabase table for news_web
     if supabase_url:
@@ -293,11 +312,15 @@ def main():
     parser.add_argument("--sarvam-key", type=str, default=None, help="Sarvam AI API key")
     parser.add_argument("--drive-folder", type=str, default=None, help="Google Drive folder link or folder ID")
     parser.add_argument("--output", type=str, default=None, help="Output MP4 file path")
-    parser.add_argument("--no-supabase", action="store_true", help="Skip uploading to Supabase Storage")
+    parser.add_argument("--upload-supabase", action="store_true", default=False, help="Upload to Supabase Storage (default: False to conserve bucket quota)")
+    parser.add_argument("--no-supabase", action="store_true", default=True, help="Skip uploading to Supabase Storage")
     parser.add_argument("--voice", type=str, default="en-IN-NeerjaNeural", help="Offline fallback voice")
     parser.add_argument("--audio-engine", type=str, default="model", choices=["auto", "sarvam", "offline", "model"], help="Audio synthesis engine")
     parser.add_argument("--scratch", action="store_true", default=True, help="Purge stale cached images to generate from scratch")
     args = parser.parse_args()
+
+    # Supabase storage disabled by default to prevent exhausting free bucket limits
+    upload_supabase_flag = args.upload_supabase and not args.no_supabase
 
     run_pipeline(
         count=args.count,
@@ -305,7 +328,7 @@ def main():
         sarvam_api_key=args.sarvam_key or os.getenv("SARVAM_API_KEY"),
         drive_folder=args.drive_folder or os.getenv("GDRIVE_FOLDER_ID"),
         output_path=args.output,
-        upload_supabase=not args.no_supabase,
+        upload_supabase=upload_supabase_flag,
         offline_voice=args.voice,
         audio_engine=args.audio_engine,
         from_scratch=args.scratch,
