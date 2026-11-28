@@ -11,6 +11,10 @@ on:
         required: true
         default: 'Trend'
 
+concurrency:
+  group: news-backend-pipeline
+  cancel-in-progress: false
+
 jobs:
   run-daily-briefing:
     runs-on: ubuntu-latest
